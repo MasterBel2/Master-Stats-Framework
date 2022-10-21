@@ -6,7 +6,8 @@ function widget:GetInfo()
         version = 0,
         date = "March 2022",
         license = "GNU GPL, v2 or later",
-        layer = -1
+        layer = math.huge,
+        handler = true
     }
 end
 
@@ -15,41 +16,37 @@ end
 ------------------------------------------------------------------------------------------------------------
 
 local MasterFramework
-local requiredFrameworkVersion = 13
+local requiredFrameworkVersion = 14
 local key
+
+local math_max = math.max
+local math_huge = math.huge
+
+local string_format = string.format
 
 local gl_BeginEnd = gl.BeginEnd
 local gl_Color = gl.Color
 local gl_Vertex = gl.Vertex
 local gl_Translate = gl.Translate
+local gl_PushMatrix = gl.PushMatrix
+local gl_Scale = gl.Scale
+local gl_PopMatrix = gl.PopMatrix
+local gl_Shape = gl.Shape
+
+local GL_LINE_STRIP = GL.LINE_STRIP
+local GL_LINES = GL.LINES
 
 ------------------------------------------------------------------------------------------------------------
 -- Interface Structure
 ------------------------------------------------------------------------------------------------------------
 
--- Creates a new table composed of the results of calling a function on each key-value pair of the original table.
-local function map(table, transform)
-    local newTable = {}
-
-    for key, value in pairs(table) do
-        local newKey, newValue = transform(key, value)
-        newTable[newKey] = newValue
-    end
-
-    return newTable
-end
-
 local stepInterval
-
-local function keysTransform(key, value)
-    return key, MasterFramework:MarginAroundRect(MasterFramework:Text(value), MasterFramework:Dimension(10), MasterFramework:Dimension(10), MasterFramework:Dimension(10), MasterFramework:Dimension(10))
-end
 
 local function stringOfNumberRoundedToPow10(value, pow10)
     if pow10 <= 0 then
-        return string.format("%." .. -pow10 .. "f", value)
+        return string_format("%." .. -pow10 .. "f", value)
     elseif pow10 > 0 then
-        return string.format("%0" .. pow10 .. "d", value)
+        return string_format("%0" .. pow10 .. "d", value)
     end
 end
 
@@ -62,25 +59,19 @@ local function ContinuousGraphKeys(min, max, stepCount, roundPow10)
 
     steps[stepCount] = stringOfNumberRoundedToPow10(max, roundPow10)
 
-    return map(steps, keysTransform)
+    return steps
 end
 
-local function reduce(array, initialValue, operation)
-    local value = initialValue
-    for _, element in ipairs(array) do
-        value = operation(initialValue, element)
-    end
-    return value
-end
+local reduce = table.reduce
 
 local count = 0
 
 local function UIGraph(data, xKeyStepCount, yKeyStepCount)
     local graph = {}
 
-    local uiXKeys
+    local uiXKeys = {}
     local maxXKeyHeight
-    local uiYKeys
+    local uiYKeys = {}
     local maxYKeyWidth
 
     local graphBaseline
@@ -91,9 +82,6 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
     function graph:SetData(newData)
         data = newData
-
-        uiXKeys = ContinuousGraphKeys(data.minX, data.maxX, xKeyStepCount + 1, -1)
-        uiYKeys = ContinuousGraphKeys(data.minY, data.maxY, yKeyStepCount + 1, -1)
     end
 
     graph:SetData(data)
@@ -105,29 +93,93 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
         gl_Vertex(graphWidth, 0)
     end
 
-    local function DrawGraphHorizontalLines()
+    local function DrawGraphHorizontalLines(xKeySeparation, yKeySeparation)
         gl_Color(0.5, 0.5, 0.5, 1)
 
         for i = 1, xKeyStepCount do
-            gl_Vertex(graphWidth / xKeyStepCount * i, 0)
-            gl_Vertex(graphWidth / xKeyStepCount * i, graphHeight)
+            local xOffset = xKeySeparation * i
+            gl_Vertex(xOffset, 0)
+            gl_Vertex(xOffset, graphHeight)
         end 
         for i = 1, yKeyStepCount do
-            gl_Vertex(0, graphHeight / yKeyStepCount * i)
-            gl_Vertex(graphWidth, graphHeight / yKeyStepCount * i)
+            local yOffset = yKeySeparation * i
+            gl_Vertex(0, yOffset)
+            gl_Vertex(graphWidth, yOffset)
         end
+    end
+
+    local keyPadding = MasterFramework:Dimension(10)
+
+    local function maxWidth(currentValue, nextValue)
+        local width, _ = nextValue:Layout(0, 0)
+        return math_max(currentValue, width)
+    end
+    local function maxHeight(currentValue, nextValue)
+        local _, height = nextValue:Layout(0, 0)
+        return math_max(currentValue, height)
     end
 
     function graph:Layout(availableWidth, availableHeight)
 
-        maxYKeyWidth = reduce(uiXKeys, -math.huge, function(currentValue, nextValue)
-            local width, _ = nextValue:Layout(0, 0)
-            return math.max(currentValue, width)
-        end)
-        maxXKeyHeight = reduce(uiXKeys, -math.huge, function(currentValue, nextValue)
-            local _, height = nextValue:Layout(0, 0)
-            return math.max(currentValue, height)
-        end)
+        local uiXKeyTitles = ContinuousGraphKeys(data.minX, data.maxX, xKeyStepCount + 1, -1)
+        local uiYKeyTitles = ContinuousGraphKeys(data.minY, data.maxY, yKeyStepCount + 1, -1)
+
+        for index, keyName in ipairs(uiXKeyTitles) do
+            local key = uiXKeys[index]
+            if key then
+                key.label:SetString(keyName)
+            else
+                key = {}
+                local label = MasterFramework:Text(keyName, nil, nil, nil, nil, index == 5)
+                local padding = MasterFramework:MarginAroundRect(label, keyPadding, keyPadding, keyPadding, keyPadding)
+                key.label = label
+
+                function key:Draw(...)
+                   padding:Draw(...) 
+                end
+                function key:Layout(...)
+                    return padding:Layout(...)
+                end
+            end
+
+            uiXKeys[index] = key
+        end
+
+        if #uiXKeyTitles < #uiXKeys then
+            for i = #uiXKeys + 1, #uiXKeyTitles do
+                uiXKeys[i] = nil
+            end
+        end
+
+        for index, keyName in ipairs(uiYKeyTitles) do
+            local key = uiYKeys[index]
+            if key then
+                key.label:SetString(keyName)
+            else
+                key = {}
+                local label = MasterFramework:Text(keyName)
+                local padding = MasterFramework:MarginAroundRect(label, keyPadding, keyPadding, keyPadding, keyPadding)
+                key.label = label
+
+                function key:Draw(...)
+                   padding:Draw(...) 
+                end
+                function key:Layout(...)
+                    return padding:Layout(...)
+                end
+            end
+
+            uiYKeys[index] = key
+        end
+
+        if #uiYKeyTitles < #uiYKeys then
+            for i = #uiYKeys + 1, #uiYKeyTitles do
+                uiYKeys[i] = nil
+            end
+        end
+
+        maxYKeyWidth = reduce(uiYKeys, -math_huge, maxWidth)
+        maxXKeyHeight = reduce(uiXKeys, -math_huge, maxHeight)
 
         width = availableWidth
         height = availableHeight
@@ -141,38 +193,48 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
     end
 
     local function DrawGraphData(line)
-        gl.Color(line.color.r, line.color.g, line.color.b, line.color.a)
+        local color = line.color
+        gl_Color(color.r, color.g, color.b, color.a)
         
         for _, vertex in ipairs(line.vertices) do
             count = count + 1
-            gl.Vertex(vertex.x, vertex.y)
+            gl_Vertex(vertex)
         end
+    end
+    local function X(key, value)
+        return { v = value }
     end
 
     function graph:Draw(x, y)
 
+        local xKeySeparation = graphWidth / xKeyStepCount
+        local yKeySeparation = graphHeight / yKeyStepCount
+
         for index, key in ipairs(uiXKeys) do
-            local width, _ = key:Layout(0, 0)
-            key:Draw(x + (index - 1) * graphWidth / xKeyStepCount  + width / 2, y)
+            local width, height = key:Layout(0, 0)
+            key:Draw(x + (index - 1) * xKeySeparation + graphSideline - width / 2, y + graphBaseline - height)
         end
         for index, key in ipairs(uiYKeys) do
             local width, height = key:Layout(0, 0)
-            key:Draw(x, y + (index - 1) * graphHeight / yKeyStepCount + height / 2)
+            key:Draw(x + graphSideline - width, y + (index - 1) * yKeySeparation + graphBaseline - height / 2)
         end
 
-        gl.PushMatrix()
+        gl_PushMatrix()
 
         gl_Translate(x + graphSideline, y + graphBaseline, 0)
 
-        gl_BeginEnd(GL.LINE_STRIP, DrawGraphEdges)
-        gl_BeginEnd(GL.LINES, DrawGraphHorizontalLines)
+        gl_BeginEnd(GL_LINE_STRIP, DrawGraphEdges)
+        gl_BeginEnd(GL_LINES, DrawGraphHorizontalLines, xKeySeparation, yKeySeparation)
         
-        gl.Scale(graphWidth / (data.maxX - data.minX), graphHeight / (data.maxY - data.minY), 1)
+        gl_Scale(graphWidth / (data.maxX - data.minX), graphHeight / (data.maxY - data.minY), 1)
         for _, line in ipairs(data.lines) do
-            
-            gl_BeginEnd(GL.LINE_STRIP, DrawGraphData, line)
-        end 
-        gl.PopMatrix()
+            -- local color = line.color
+            -- gl_Color(color.r, color.g, color.b, color.a)
+            -- gl_Shape(GL_LINE_STRIP, table.imap(line.vertices, X))
+            -- Thought that would be faster, but it seems to be something like 10% slower. Yay. But testing it on like 9 data points so who knows.
+            gl_BeginEnd(GL_LINE_STRIP, DrawGraphData, line)
+        end
+        gl_PopMatrix()
     end
 
     return graph
@@ -293,10 +355,51 @@ end
 -- end
 
 ------------------------------------------------------------------------------------------------------------
--- Data Structure
+-- UI Element Var Declarations
 ------------------------------------------------------------------------------------------------------------
 
 local uiGraph
+local menu
+local uiCategories = {}
+
+local refreshRequested = true
+
+local function UISectionedButtonList(name, options, action)
+    local padding = MasterFramework:Dimension(8)
+
+    local newButtons = {}
+
+    for _, optionName in pairs(options) do
+        local button = MasterFramework:Button(
+            MasterFramework:Text(optionName),
+            function(self)
+                self.margin.background = MasterFramework:Color(0.66, 1, 1, 0.66) -- SelectedColor
+                action(name, optionName)
+            end
+        )
+        table.insert(newButtons, button)
+    end
+
+    local buttonList = MasterFramework:VerticalStack(
+        {
+            MasterFramework:Text(name, MasterFramework:Color(1, 1, 1, 0.66)),
+            MasterFramework:VerticalStack(
+                newButtons,
+                padding,
+                0
+            )
+        },
+        padding,
+        0
+    )
+
+    return buttonList
+end
+
+
+------------------------------------------------------------------------------------------------------------
+-- Dummy Data (For testing purposes)
+------------------------------------------------------------------------------------------------------------
 
 local graphData = {
     minY = 0,
@@ -306,103 +409,153 @@ local graphData = {
     lines = {
         {
             color = { r = 1, g = 0, b = 0, a = 1 },
-            vertices = { {x = 0, y = 0}, {x = 0.5, y = 1}, { x = 1, y = 0.5} }
+            vertices = { { 0, 0 }, { 0.5, 1 }, { 1, 0.5 } }
         },
         {
             color = { r = 0, g = 0, b = 1, a = 1 },
-            vertices = { {x = 0, y = 0.25}, {x = 0.5, y = 0.75}, { x = 1, y = 0.5} }
+            vertices = { { 0, 0.25 }, { 0.5, 0.75 }, { 1, 0.5 } }
         },
         {
             color = { r = 0, g = 1, b = 0, a = 1 },
-            vertices = { {x = 0, y = 0}, {x = 0.5, y = 0.75}, { x = 1, y = 0.75} }
+            vertices = { { 0, 0 }, { 0.5, 0.75 }, { 1, 0.75 } }
         }
     }
 }
-
-------------------------------------------------------------------------------------------------------------
--- Data Structure
-------------------------------------------------------------------------------------------------------------
-
-local API = {}
-local categories = {}
-
-local function NewCategory()
-    local category = {}
-    local graphs = {}
-
-    function category:AddGraph(name, widget, data)
-        graphs[name] = { name = name, data = data }
-    end
-    function category:RemoveGraph(name, widget)
-        graphs[name] = nil
-    end
-    function category:Graphs()
-        return graphs
-    end
-
-    return category
-end
-
-function API:Category(name)
-    local category = categories[name]
-    if not category then 
-        category = NewCategory()
-
-        categories[name] = category
-    end
-    return category 
-end
 
 ------------------------------------------------------------------------------------------------------------
 -- Create / Destroy
 ------------------------------------------------------------------------------------------------------------
 
 function widget:Update()
-    -- temp, just find a graph and show it
-    for name, category in pairs(categories) do
-        for _, graph in pairs(category:Graphs()) do
-            uiGraph:SetData(graph.data)
+
+    if refreshRequested then
+        local categories = {}
+
+        for widgetName, widget in pairs(widgetHandler.widgets) do
+            if widget.MasterStatsCategories then
+                -- categories[name] = { graphs = table }
+                local widgetCategories = widget:MasterStatsCategories()
+
+                for categoryName, widgetCategory in pairs(widgetCategories) do
+                    local section = {}
+                    for graphName, graph in pairs(widgetCategory) do
+                        section[graphName] = graph 
+                    end
+
+                    local existingCategory = categories[categoryName] or { sections = {} }
+                    existingCategory.sections[widgetName] = section
+
+                    categories[categoryName] = existingCategory
+                end
+            end
         end
+
+        local uiCategories = table.mapToArray(categories, function(key, value)
+
+            local graphNames = {}
+            local graphData = {}
+
+            for _, section in pairs(value.sections) do
+                for graphName, _graphData in pairs(section) do
+                    table.insert(graphNames, graphName)
+                    graphData[graphName] = _graphData
+                end
+            end
+
+            table.sort(graphNames)
+
+            return {
+                name = key,
+                list = UISectionedButtonList(key, graphNames, function(_, graphName)
+                    uiGraph:SetData(graphData[graphName])
+                end)
+            }
+        end)
+
+        table.sort(uiCategories, function(a, b) return a.name < b.name end)
+
+        menu.members = table.imap(uiCategories, function(_, value)
+            return value.list
+        end)
+
+        refreshRequested = nil
     end
 end
 
+WG.MasterStats = {}
+function WG.MasterStats:Refresh()
+    refreshRequested = true
+end
+    
 function widget:Initialize()
     MasterFramework = WG.MasterFramework[requiredFrameworkVersion]
     if not MasterFramework then
-        Spring.Echo("[Key Tracker] Error: MasterFramework " .. requiredFrameworkVersion .. " not found! Removing self.")
-        widgetHandler:RemoveWidget(self)
-        return
+        error("[Master Custom Stats] MasterFramework " .. requiredFrameworkVersion .. " not found!")
+    end
+
+    if not MasterFramework.areComplexElementsAvailable then
+        error("[Master Custom Stats] MasterFramework complex elements not found!")
     end
 
     stepInterval = MasterFramework:Dimension(50)
 
-    uiGraph = UIGraph( 
+    uiGraph = UIGraph(
         graphData,
         5,
         5
     )
-    
-    key = MasterFramework:InsertElement(
+
+    menu = MasterFramework:VerticalStack(
+        {},
+        MasterFramework:Dimension(8),
+        0
+    )
+
+    local split = MasterFramework:HorizontalStack(
+        { 
+            menu,
+            MasterFramework:MarginAroundRect(
+                uiGraph,
+                MasterFramework:Dimension(0),
+                MasterFramework:Dimension(0),
+                MasterFramework:Dimension(0),
+                MasterFramework:Dimension(0),
+                { MasterFramework:Color(0, 0, 0, 0.7) },
+                MasterFramework:Dimension(0),
+                false
+                -- false
+            )
+        },
+        MasterFramework:Dimension(8), 
+        1
+    )
+
+    local resizableFrame = MasterFramework:ResizableMovableFrame(
+        -- "MasterCustomStats StatsFrame",
+        nil,
         MasterFramework:PrimaryFrame(
             MasterFramework:MarginAroundRect(
-                MasterFramework:MarginAroundRect(
-                    uiGraph,
-                    MasterFramework:Dimension(0),
-                    MasterFramework:Dimension(0),
-                    MasterFramework:Dimension(0),
-                    MasterFramework:Dimension(0),
-                    { MasterFramework:Color(1, 1, 1, 0.1) },
-                    MasterFramework:Dimension(0)
-                ),
-                MasterFramework:Dimension(100),
-                MasterFramework:Dimension(100),
-                MasterFramework:Dimension(100),
-                MasterFramework:Dimension(100),
+                split,
+                MasterFramework:Dimension(20),
+                MasterFramework:Dimension(20),
+                MasterFramework:Dimension(20),
+                MasterFramework:Dimension(20),
                 { MasterFramework:Color(0, 0, 0, 0.7) },
-                MasterFramework:Dimension(0)
+                MasterFramework:Dimension(5),
+                -- MasterFramework:Dimension(0),
+                false
+                -- false
             )
         ),
-        "Test Graph"
+        MasterFramework.viewportWidth * 0.1, MasterFramework.viewportHeight * 0.1, 
+        MasterFramework.viewportWidth * 0.8, MasterFramework.viewportHeight * 0.8,
+        false
+    )
+    
+    key = MasterFramework:InsertElement(
+        resizableFrame,
+        "Stats",
+        MasterFramework.layerRequest.top()
     )
 
     WG.MasterStats = API
