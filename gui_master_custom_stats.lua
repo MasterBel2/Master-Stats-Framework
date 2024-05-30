@@ -11,27 +11,113 @@ function widget:GetInfo()
     }
 end
 
+-- TODO:
+-- https://discord.com/channels/549281623154229250/1132864533258575872
+-- https://discord.com/channels/549281623154229250/1069705949348114572
+
+--[[
+    To Display Your Graph Here: Implement `function widget:MasterStatsCategories()`
+
+    This widget should return a table of categories, where: 
+    - the key for each category should be a human-readable string, that will be case-sensitively merged with categories from other widgets.
+    - the value for each category should be a table of graphs, where:
+      - the key for each graph should be a unique human-readable string that will be used as the graph's title on-screen
+      - the value for each graph should be a table with the following fields:
+        - (number) minX, maxX, minY, maxX. Values provided in the table should not exceed the bounds specified by these values
+        - (boolean) discrete - specifies whether each value is a descrete step. If true, the graph will draw extra vertices to avoid "interpolated" slanted lines between values.
+        - (array) lines, where each value is a table with the following properties
+          - (table) color - a table containing { r = r, g = g, b = b, a = a }
+          - (table) vertices where:
+            - (array) x, y - the array of x/y values, respectively. vertices.x[n] corresponds to vertices.y[n]. The data is structured like this to achieve SIGNIFICANT speedups.
+
+    E.g. 
+
+    ```lua
+    function widget:MasterStatsCategories()
+        return {
+            ["Test Category"] = {
+                ["Test Graph"] = {
+                    minX = 0,
+                    maxX = 1,
+                    minY = 0,
+                    maxY = 1,
+                    lines = {
+                        {
+                            title = "Belmakor", -- optional
+                            hidden = true, -- optional; when absent, the line is assumed to be showing. (i.e. lines are only hidden if explicitely set to be hidden)
+                            color = { r = 1, g = 0, b = 0, a = 1 },
+                            vertices = { x = { 0, 0.5, 1 }, y = {0, 1 , 0.5 } }
+                        },
+                        {
+                            title = "BelSon", -- optional
+                            color = { r = 0, g = 0, b = 1, a = 1 },
+                            vertices = { x = { 0, 0.5, 1 }, y = {0.25, 0.75 , 0.5 } }
+                        },
+                        {
+                            title = "MasterBel2", -- optional
+                            color = { r = 0, g = 1, b = 0, a = 1 },
+                            vertices = { x = { 0, 0.5, 1 }, y = {0, 0.75 , 0.75 } }
+                        }
+                    }
+                }
+            }
+        }
+    end
+    ```
+]]
+
+------------------------------------------------------------------------------------------------------------
+-- Dummy Data (For testing purposes)
+------------------------------------------------------------------------------------------------------------
+
+local graphData = {
+    minY = 0,
+    minX = 0,
+    maxY = 1,
+    maxX = 1,
+    lines = {
+        {
+            color = { r = 1, g = 0, b = 0, a = 1 },
+            vertices = { x = { 0, 0.5, 1 }, y = {0, 1 , 0.5 } }
+        },
+        {
+            color = { r = 0, g = 0, b = 1, a = 1 },
+            vertices = { x = { 0, 0.5, 1 }, y = {0.25, 0.75 , 0.5 } }
+        },
+        {
+            color = { r = 0, g = 1, b = 0, a = 1 },
+            vertices = { x = { 0, 0.5, 1 }, y = {0, 0.75 , 0.75 } }
+        }
+    }
+}
+
 ------------------------------------------------------------------------------------------------------------
 -- Imports
 ------------------------------------------------------------------------------------------------------------
 
 local MasterFramework
-local requiredFrameworkVersion = 14
+local requiredFrameworkVersion = 42
 local key
 
-local math_max = math.max
 local math_huge = math.huge
+
+local math_max = math.max
+local math_min = math.min
+local math_log = math.log
+
+local reduce
 
 local string_format = string.format
 
 local gl_BeginEnd = gl.BeginEnd
 local gl_Color = gl.Color
-local gl_Vertex = gl.Vertex
-local gl_Translate = gl.Translate
+local gl_LineWidth = gl.LineWidth
+local gl_PopMatrix = gl.PopMatrix
 local gl_PushMatrix = gl.PushMatrix
 local gl_Scale = gl.Scale
-local gl_PopMatrix = gl.PopMatrix
 local gl_Shape = gl.Shape
+local gl_Translate = gl.Translate
+local gl_Vertex = gl.Vertex
 
 local GL_LINE_STRIP = GL.LINE_STRIP
 local GL_LINES = GL.LINES
@@ -39,6 +125,8 @@ local GL_LINES = GL.LINES
 ------------------------------------------------------------------------------------------------------------
 -- Interface Structure
 ------------------------------------------------------------------------------------------------------------
+
+local objectsToDelete = {}
 
 local stepInterval
 
@@ -50,11 +138,17 @@ local function stringOfNumberRoundedToPow10(value, pow10)
     end
 end
 
-local function ContinuousGraphKeys(min, max, stepCount, roundPow10)
-    local stepMagnitude = (max - min) / stepCount
+local function ContinuousGraphKeys(min, max, stepCount, roundPow10, isLogarithmic)
     local steps = {}
+        
     for i = 1, stepCount - 1 do
-        steps[i] = stringOfNumberRoundedToPow10(min + (i - 1) * stepMagnitude, roundPow10)
+        local value
+        if isLogarithmic then
+            value = math.exp(math.log(max) / stepCount * (i - 1))
+        else
+            value = min + (i - 1) * (max - min) / stepCount
+        end
+        steps[i] = stringOfNumberRoundedToPow10(value, roundPow10)
     end
 
     steps[stepCount] = stringOfNumberRoundedToPow10(max, roundPow10)
@@ -62,85 +156,304 @@ local function ContinuousGraphKeys(min, max, stepCount, roundPow10)
     return steps
 end
 
-local reduce = table.reduce
+local first = true
 
-local count = 0
+local function UIGraphData(data, xKeyStepCount, yKeyStepCount)
+    local uiGraphData = { data = data }
+
+    local cachedWidth, cahcedHeight
+    function uiGraphData:Layout(availableWidth, availableHeight)
+        cachedWidth = availableWidth
+        cachedHeight = availableHeight
+    end
+
+    local cachedX, cachedY
+    function uiGraphData:Position(x, y)
+        cachedX = x
+        cachedY = y
+
+        table.insert(MasterFramework.activeDrawingGroup.drawTargets, self)
+    end
+
+    local function DrawGraphData(line, pixelWidth)
+        local color = line.color
+        gl_Color(color.r, color.g, color.b, color.a)
+
+        local vertexCount = #line.vertices.x
+        local vertices = line.vertices
+        local lastDrawnX = -1
+        local firstX = vertices.x[1]
+        local firstY = vertices.y[1]
+        local lastX = vertices.x[vertexCount]
+        local lastY = vertices.y[vertexCount]
+
+        lastDrawnY = firstY
+        vertex(firstX, firstY)
+
+        local xPerPixelWidth = (lastX - firstX) / pixelWidth
+        
+        for i = 2, vertexCount do
+            if vertices.x[i] > lastDrawnX + xPerPixelWidth then
+                if data.discrete then
+                    vertex(vertices.x[i], vertices.y[i - 1])
+                end
+                vertex(vertices.x[i], vertices.y[i])
+                lastDrawnX = i
+            end
+        end
+
+        vertex(lastX, lastY)
+        if data.discrete then
+            vertex(data.maxX, lastY)
+        end
+    end
+    
+    -- Draw
+
+    local vboDefinition = { { id = 0, name = "custom_stats_graph_line", size = 2 } }
+    local function DrawGraphDataGL4(line, pixelWidth)
+        local vboData = {}
+
+        local color = line.color
+        gl_Color(color.r, color.g, color.b, color.a)
+        
+        local vertexCount = #line.vertices.x
+        local vertices = line.vertices
+        local lastDrawnX = -1
+        local firstX = vertices.x[1]
+        local firstY = vertices.y[1]
+        local lastX = vertices.x[vertexCount]
+        local lastY = vertices.y[vertexCount]
+
+        vboData[1] = firstX
+        vboData[2] = firstY
+        local dataCount = 2
+
+        local xPerPixelWidth = (lastX - firstX) / pixelWidth
+        
+        for i = 2, vertexCount do
+            if vertices.x[i] > lastDrawnX + xPerPixelWidth then
+                if data.discrete then
+                    dataCount = dataCount + 1
+                    vboData[dataCount] = vertices.x[i]
+                    dataCount = dataCount + 1
+                    vboData[dataCount] = vertices.y[i - 1]
+                end
+                dataCount = dataCount + 1
+                vboData[dataCount] = vertices.x[i]
+                dataCount = dataCount + 1
+                vboData[dataCount] = vertices.y[i]
+                lastDrawnX = i
+            end
+        end
+
+        dataCount = dataCount + 1
+        vboData[dataCount] = lastX
+        dataCount = dataCount + 1
+        vboData[dataCount] = lastY
+        if data.discrete then
+            dataCount = dataCount + 1
+            vboData[dataCount] = data.maxX
+            dataCount = dataCount + 1
+            vboData[dataCount] = lastY
+        end
+
+        local verticesVBO = gl.GetVBO()
+        local verticesVAO = gl.GetVAO()
+
+        verticesVBO:Define(#vboData / 2, vboDefinition)
+        verticesVBO:Upload(vboData)
+        verticesVAO:AttachVertexBuffer(verticesVBO)
+        
+        verticesVAO:DrawArrays(GL.LINE_STRIP, #vboData / 2, 0)
+
+        verticesVBO:Delete()
+        verticesVAO:Delete()
+    end
+
+    local function DrawGraphEdges()
+        gl_Color(1, 1, 1, 1)
+        gl_Vertex(0, 0)
+        gl_Vertex(0, cachedHeight)
+        gl_Vertex(0, 0)
+        gl_Vertex(cachedWidth, 0)
+    end
+
+
+    local function DrawGraphHorizontalLines(xKeySeparation, yKeySeparation)
+        gl_Color(0.5, 0.5, 0.5, 1)
+        local xKeySeparation = cachedWidth / xKeyStepCount
+        local yKeySeparation = cachedHeight / yKeyStepCount
+
+        for i = 1, xKeyStepCount do
+            local xOffset = xKeySeparation * i
+            gl_Vertex(xOffset, 0)
+            gl_Vertex(xOffset, cachedHeight)
+        end 
+        for i = 1, yKeyStepCount do
+            local yOffset = yKeySeparation * i
+            gl_Vertex(0, yOffset)
+            gl_Vertex(cachedWidth, yOffset)
+        end
+    end
+
+    function uiGraphData:Draw()
+
+        local data = self.data
+
+        gl_PushMatrix()
+
+        gl_LineWidth(1)
+
+        gl_Translate(cachedX, cachedY, 0)
+
+        gl_BeginEnd(GL_LINES, DrawGraphHorizontalLines)
+        
+        gl_PushMatrix()
+        if data.showAsLogarithmic then
+            gl_Scale(cachedWidth / (data.maxX - data.minX), cachedHeight / (math_log(data.maxY)), 1)
+        else
+            gl_Scale(cachedWidth / (data.maxX - data.minX), cachedHeight / (data.maxY - data.minY), 1)
+        end
+        for _, line in ipairs(data.lines) do
+            -- local color = line.color
+            -- gl_Color(color.r, color.g, color.b, color.a)
+            -- gl_Shape(GL_LINE_STRIP, table.imap(line.vertices, X))
+            -- Thought that would be faster, but it seems to be something like 10% slower. Yay. But testing it on like 9 data points so who knows.
+            if not line.hidden then
+                if gl4 then
+                    DrawGraphDataGL4(line, cachedWidth)
+                else
+                    gl_BeginEnd(GL_LINE_STRIP, DrawGraphData, line, cachedWidth)
+                end
+            end
+        end
+        gl_PopMatrix()
+
+        gl_BeginEnd(GL_LINES, DrawGraphEdges)
+        
+        gl_PopMatrix()
+    end
+
+    return uiGraphData
+end
 
 local function UIGraph(data, xKeyStepCount, yKeyStepCount)
+
     local graph = {}
+
+    -- local uiGraphData = UIGraphData(data, xKeyStepCount, yKeyStepCount)
 
     local uiXKeys = {}
     local maxXKeyHeight
     local uiYKeys = {}
     local maxYKeyWidth
 
-    local graphBaseline
-    local graphSideline
+    local graphBaseline, graphSideline
 
-    local width, height
     local graphWidth, graphHeight
 
     function graph:SetData(newData)
         data = newData
     end
 
+    function graph:SetShowAsLogarithmic(newValue)
+        data.showAsLogarithmic = newValue
+    end
+    function graph:SetShowAsDelta(newValue)
+        data.showAsDelta = newValue
+    end
+
     graph:SetData(data)
 
-    local function DrawGraphEdges()
-        gl_Color(1, 1, 1, 1)
-        gl_Vertex(0, graphHeight)
-        gl_Vertex(0, 0)
-        gl_Vertex(graphWidth, 0)
+    -- Generate Data
+
+    local vertexXCoordinates = {}
+    local vertexYCoordinates = {}
+    local minY
+    local maxY
+
+    local lastDrawnY
+    -- local function gl_Vertex_Delta(x, y, vertexFunc)
+    --     vertexFunc(x, y - lastY)
+    -- end
+    -- local function gl_Vertex_Logarithmic(x, y)
+    --     gl_Vertex(x, math_max(0, math_log(y)))
+    -- end
+
+    local function vertex(x, y, lineXCoordinates, lineYCoordinates)
+        if uiGraphData.data.showAsDelta then
+            local _lastDrawnY = y
+            y = y - lastDrawnY
+            lastDrawnY = _lastDrawnY
+        end
+        if uiGraphData.data.showAsLogarithmic then
+            y = math_max(0, math_log(y))
+        end
+        vertexXCoordinates[#vertexXCoordinates + 1] = x
+        vertexYCoordinates[#vertexYCoordinates + 1] = y
+
+        minY = math_min(y, minY)
+        maxY = math_max(y, maxY)
     end
 
-    local function DrawGraphHorizontalLines(xKeySeparation, yKeySeparation)
-        gl_Color(0.5, 0.5, 0.5, 1)
+    local function GenerateLineData(line, pixelWidth)
+        local vertexCount = #line.vertices.x
+        local vertices = line.vertices
+        local lastDrawnX = -1
+        local firstX = vertices.x[1]
+        local firstY = vertices.y[1]
+        local lastX = vertices.x[vertexCount]
+        local lastY = vertices.y[vertexCount]
 
-        for i = 1, xKeyStepCount do
-            local xOffset = xKeySeparation * i
-            gl_Vertex(xOffset, 0)
-            gl_Vertex(xOffset, graphHeight)
-        end 
-        for i = 1, yKeyStepCount do
-            local yOffset = yKeySeparation * i
-            gl_Vertex(0, yOffset)
-            gl_Vertex(graphWidth, yOffset)
+        lastDrawnY = firstY
+        vertex(firstX, firstY)
+
+        local xPerPixelWidth = (lastX - firstX) / pixelWidth
+        
+        for i = 2, vertexCount do
+            if vertices.x[i] > lastDrawnX + xPerPixelWidth then
+                if data.discrete then
+                    vertex(vertices.x[i], vertices.y[i - 1])
+                end
+                vertex(vertices.x[i], vertices.y[i])
+                lastDrawnX = i
+            end
+        end
+
+        vertex(lastX, lastY)
+        if data.discrete then
+            vertex(data.maxX, lastY)
         end
     end
+
+    -- Layout, Position & Draw
 
     local keyPadding = MasterFramework:Dimension(10)
 
     local function maxWidth(currentValue, nextValue)
-        local width, _ = nextValue:Layout(0, 0)
+        local width, _ = nextValue:Layout(math_huge, math_huge)
         return math_max(currentValue, width)
     end
     local function maxHeight(currentValue, nextValue)
-        local _, height = nextValue:Layout(0, 0)
+        local _, height = nextValue:Layout(math_huge, math_huge)
         return math_max(currentValue, height)
     end
 
     function graph:Layout(availableWidth, availableHeight)
-
         local uiXKeyTitles = ContinuousGraphKeys(data.minX, data.maxX, xKeyStepCount + 1, -1)
-        local uiYKeyTitles = ContinuousGraphKeys(data.minY, data.maxY, yKeyStepCount + 1, -1)
+        local uiYKeyTitles = ContinuousGraphKeys(data.minY, data.maxY, yKeyStepCount + 1, -1, data.showAsLogarithmic)
 
         for index, keyName in ipairs(uiXKeyTitles) do
             local key = uiXKeys[index]
             if key then
                 key.label:SetString(keyName)
             else
-                key = {}
-                local label = MasterFramework:Text(keyName, nil, nil, nil, nil, index == 5)
-                local padding = MasterFramework:MarginAroundRect(label, keyPadding, keyPadding, keyPadding, keyPadding)
+                local label = MasterFramework:Text(keyName)
+                key = MasterFramework:MarginAroundRect(label, keyPadding, keyPadding, keyPadding, keyPadding)
                 key.label = label
-
-                function key:Draw(...)
-                   padding:Draw(...) 
-                end
-                function key:Layout(...)
-                    return padding:Layout(...)
-                end
             end
+            key:Layout(math.huge, math.huge)
 
             uiXKeys[index] = key
         end
@@ -156,18 +469,12 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
             if key then
                 key.label:SetString(keyName)
             else
-                key = {}
                 local label = MasterFramework:Text(keyName)
-                local padding = MasterFramework:MarginAroundRect(label, keyPadding, keyPadding, keyPadding, keyPadding)
+                key = MasterFramework:MarginAroundRect(label, keyPadding, keyPadding, keyPadding, keyPadding)
                 key.label = label
-
-                function key:Draw(...)
-                   padding:Draw(...) 
-                end
-                function key:Layout(...)
-                    return padding:Layout(...)
-                end
             end
+
+            key:Layout(math.huge, math.huge)
 
             uiYKeys[index] = key
         end
@@ -181,178 +488,34 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
         maxYKeyWidth = reduce(uiYKeys, -math_huge, maxWidth)
         maxXKeyHeight = reduce(uiXKeys, -math_huge, maxHeight)
 
-        width = availableWidth
-        height = availableHeight
-
         graphBaseline = maxXKeyHeight
         graphSideline = maxYKeyWidth
-        graphWidth = width - 2 * graphSideline
-        graphHeight = height - 2 * graphBaseline
+        graphWidth = availableWidth - 2 * graphSideline
+        graphHeight = availableHeight - 2 * graphBaseline
+
+        uiGraphData:Layout(graphWidth, graphHeight)
 
         return availableWidth, availableHeight
     end
 
-    local function DrawGraphData(line)
-        local color = line.color
-        gl_Color(color.r, color.g, color.b, color.a)
-        
-        for _, vertex in ipairs(line.vertices) do
-            count = count + 1
-            gl_Vertex(vertex)
-        end
-    end
-    local function X(key, value)
-        return { v = value }
-    end
-
-    function graph:Draw(x, y)
-
+    function graph:Position(x, y)
         local xKeySeparation = graphWidth / xKeyStepCount
         local yKeySeparation = graphHeight / yKeyStepCount
 
         for index, key in ipairs(uiXKeys) do
-            local width, height = key:Layout(0, 0)
-            key:Draw(x + (index - 1) * xKeySeparation + graphSideline - width / 2, y + graphBaseline - height)
+            local width, height = key:Layout(math.huge, math.huge)
+            key:Position(x + (index - 1) * xKeySeparation + graphSideline - width / 2, y + graphBaseline - height)
         end
         for index, key in ipairs(uiYKeys) do
-            local width, height = key:Layout(0, 0)
-            key:Draw(x + graphSideline - width, y + (index - 1) * yKeySeparation + graphBaseline - height / 2)
+            local width, height = key:Layout(math.huge, math.huge)
+            key:Position(x + graphSideline - width, y + (index - 1) * yKeySeparation + graphBaseline - height / 2)
         end
 
-        gl_PushMatrix()
-
-        gl_Translate(x + graphSideline, y + graphBaseline, 0)
-
-        gl_BeginEnd(GL_LINE_STRIP, DrawGraphEdges)
-        gl_BeginEnd(GL_LINES, DrawGraphHorizontalLines, xKeySeparation, yKeySeparation)
-        
-        gl_Scale(graphWidth / (data.maxX - data.minX), graphHeight / (data.maxY - data.minY), 1)
-        for _, line in ipairs(data.lines) do
-            -- local color = line.color
-            -- gl_Color(color.r, color.g, color.b, color.a)
-            -- gl_Shape(GL_LINE_STRIP, table.imap(line.vertices, X))
-            -- Thought that would be faster, but it seems to be something like 10% slower. Yay. But testing it on like 9 data points so who knows.
-            gl_BeginEnd(GL_LINE_STRIP, DrawGraphData, line)
-        end
-        gl_PopMatrix()
+        uiGraphData:Position(x + graphSideline, y + graphBaseline)
     end
 
     return graph
 end
-
--- local function UIBarGraph(xKeys, yKeys, data)
---     local graph = {}
-
---     local function keysTransform(key, name)
---         return key, MasterFramework:GeometryTarget(MasterFramework:Text(name))
---     end
-
---     local uiXKeys = map(xKeys, keysTransform)
---     local uiYKeys = map(yKeys, keysTransform)
-
---     local xKey = GraphKeyMargin(MasterFramework:HorizontalStack(uiXKeys, MasterFramework:Dimension(20), 0.5))
---     local yKey = GraphKeyMargin(MasterFramework:VerticalStack(uiYKeys, MasterFramework:Dimension(20), 0.5))
-
---     local width, height
---     local xKeyWidth, xKeyHeight
---     local yKeyWidth, yKeyHeight
-
---     local function DrawGraphEdges()
---         gl_Color(1, 1, 1, 1)
---         gl_Vertex(yKeyWidth, height)
---         gl_Vertex(yKeyWidth, xKeyHeight)
---         gl_Vertex(width, xKeyHeight)
---     end
-
---     local function DrawGraphHorizontalLines()
---         gl_Color(0.5, 0.5, 0.5, 1)
-
---         for _, target in ipairs(uiXKeys) do
---             local targetX, targetY = target:CachedPosition()
---             local targetWidth, targetHeight = target:Size()
-
---             gl_Vertex(targetX + targetWidth / 2, xKeyHeight)
---             gl_Vertex(targetX + targetWidth / 2, height)
---         end 
---         for _, target in ipairs(uiYKeys) do
---             local targetX, targetY = target:CachedPosition()
---             local targetWidth, targetHeight = target:Size()
-
---             gl_Vertex(yKeyWidth, targetY + targetHeight / 2)
---             gl_Vertex(width, targetY + targetHeight / 2)
---         end
---     end
-
---     function graph:Layout(availableWidth, availableHeight)
---         xKeyWidth, xKeyHeight = xKey:Layout(availableWidth, availableHeight)
---         yKeyWidth, yKeyHeight = yKey:Layout(availableWidth, availableHeight)
-
---         width = xKeyWidth + yKeyWidth
---         height = yKeyHeight + xKeyHeight
-
---         return availableWidth, availableHeight
---     end
-
---     local function DrawGraphData(line)
---         gl.Color(line.color.r, line.color.g, line.color.b, line.color.a)
-
---         for _, vertex in ipairs(line.vertices) do
---             gl.Vertex(vertex.x, vertex.y)
---         end
---     end
-
---     function graph:Draw(x, y)
---         xKey:Draw(yKeyWidth, 0)
---         yKey:Draw(0, xKeyHeight)
-
---         gl_BeginEnd(GL.LINE_STRIP, DrawGraphEdges)
---         gl_BeginEnd(GL.LINES, DrawGraphHorizontalLines)
-
---         gl.PushMatrix()
---         gl.Translate(x + yKeyWidth, y + xKeyHeight, 0)
---         gl.Scale(xKeyWidth / (data.maxX - data.minX), yKeyHeight / (data.maxY - data.minY), 1)
---         for _, line in ipairs(data.lines) do
---             gl_BeginEnd(GL.LINE_STRIP, DrawGraphData, line)
---         end 
---         gl.PopMatrix()
---     end
-
---     return graph
--- end
-
--- local function UIBarGraphContent(barGraph)
---     local barGraph = {}
-
-    
-
---     -- local rasterizer = MasterFramework:Rasterizer()
-
---     function barGraph:Refesh()
-
---     end
-
---     function barGraph:Layout(availableWidth, availableHeight)
---         return availableWidth, availableHeight
---     end
---     function barGraph:Draw(x, y)
---     end
---     return barGraph
--- end
--- local function UILineGraphContent(lineGraph)
---     local lineGraph = {}
---     function lineGraph:Layout(availableWidth, availableHeight)
---         return availableWidth, availableHeight
---     end
---     function lineGraph:Draw(x, y)
---     end
---     return lineGraph
--- end
-
--- local function UICategory(category)
---     local category = {}
-
---     return category
--- end
 
 ------------------------------------------------------------------------------------------------------------
 -- UI Element Var Declarations
@@ -360,6 +523,9 @@ end
 
 local uiGraph
 local menu
+local logarithmicCheckBox
+local deltaCheckBox
+local graphLinesMenu
 local uiCategories = {}
 
 local refreshRequested = true
@@ -373,7 +539,8 @@ local function UISectionedButtonList(name, options, action)
         local button = MasterFramework:Button(
             MasterFramework:Text(optionName),
             function(self)
-                self.margin.background = MasterFramework:Color(0.66, 1, 1, 0.66) -- SelectedColor
+                first = true
+                -- self.margin.background = MasterFramework:Color(0.66, 1, 1, 0.66) -- SelectedColor
                 action(name, optionName)
             end
         )
@@ -395,32 +562,6 @@ local function UISectionedButtonList(name, options, action)
 
     return buttonList
 end
-
-
-------------------------------------------------------------------------------------------------------------
--- Dummy Data (For testing purposes)
-------------------------------------------------------------------------------------------------------------
-
-local graphData = {
-    minY = 0,
-    minX = 0,
-    maxY = 1,
-    maxX = 1,
-    lines = {
-        {
-            color = { r = 1, g = 0, b = 0, a = 1 },
-            vertices = { { 0, 0 }, { 0.5, 1 }, { 1, 0.5 } }
-        },
-        {
-            color = { r = 0, g = 0, b = 1, a = 1 },
-            vertices = { { 0, 0.25 }, { 0.5, 0.75 }, { 1, 0.5 } }
-        },
-        {
-            color = { r = 0, g = 1, b = 0, a = 1 },
-            vertices = { { 0, 0 }, { 0.5, 0.75 }, { 1, 0.75 } }
-        }
-    }
-}
 
 ------------------------------------------------------------------------------------------------------------
 -- Create / Destroy
@@ -468,6 +609,21 @@ function widget:Update()
                 name = key,
                 list = UISectionedButtonList(key, graphNames, function(_, graphName)
                     uiGraph:SetData(graphData[graphName])
+                    logarithmicCheckBox:SetChecked(graphData[graphName].showAsLogarithmic)
+                    deltaCheckBox:SetChecked(graphData[graphName].showAsDelta)
+                    graphLinesMenu.items = table.imap(graphData[graphName].lines, function(_, line)
+                        local color = MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)
+                        local checkbox = MasterFramework:CheckBox(12, function(_, checked) line.hidden = not checked end)
+                        checkbox:SetChecked(not line.hidden)
+                        return MasterFramework:HorizontalStack(
+                            {
+                                checkbox,
+                                line.title and MasterFramework:Text(line.title, color) or MasterFramework:Rect(MasterFramework:Dimension(20), MasterFramework:Dimension(12), MasterFramework:Dimension(3), { color })
+                            },
+                            MasterFramework:Dimension(8),
+                            0.5
+                        )
+                    end)
                 end)
             }
         end)
@@ -483,19 +639,94 @@ function widget:Update()
 end
 
 WG.MasterStats = {}
+
 function WG.MasterStats:Refresh()
     refreshRequested = true
 end
-    
-function widget:Initialize()
-    MasterFramework = WG.MasterFramework[requiredFrameworkVersion]
-    if not MasterFramework then
-        error("[Master Custom Stats] MasterFramework " .. requiredFrameworkVersion .. " not found!")
+
+-- function widget:DebugInfo()
+--     return graphLinesMenu
+-- end
+
+local function HorizontalWrap(items, horizontalSpacing, verticalSpacing, xAnchor, yAnchor)
+    local wrap = { items = items }
+    local rows
+
+    local cachedWidth
+    local cachedHeight
+
+    function wrap:Layout(availableWidth, availableHeight)
+        rows = { { cumulativeWidth = 0, maxHeight = 0, verticalOffset = 0 } }
+        local scaledHorizontalSpacing = horizontalSpacing()
+        local scaledVerticalSpacing = verticalSpacing()
+
+        for index, item in ipairs(self.items) do
+            local row = rows[#rows]
+            local itemWidth, itemHeight = item:Layout(availableWidth, availableHeight)
+            local newCumulativeWidth = row.cumulativeWidth + itemWidth
+
+            if #row > 0 then
+                newCumulativeWidth = newCumulativeWidth + scaledHorizontalSpacing
+            end
+
+            if newCumulativeWidth > availableWidth then
+                item._horizontalWrap_xOffset = 0
+                rows[#rows + 1] = {
+                    cumulativeWidth = itemWidth,
+                    maxHeight = itemHeight,
+                    verticalOffset = row.verticalOffset + row.maxHeight + scaledVerticalSpacing, 
+                    [1] = item 
+                }
+            else
+                row.maxHeight = math.max(row.maxHeight, itemHeight)
+
+                item._horizontalWrap_xOffset = row.cumulativeWidth
+                if #row > 0 then
+                    item._horizontalWrap_xOffset = item._horizontalWrap_xOffset + scaledHorizontalSpacing
+                end
+
+                row.cumulativeWidth = newCumulativeWidth
+
+                row[#row + 1] = item
+            end
+        end
+
+        local rowCount = #rows
+        cachedWidth = 0
+        for i = 1, rowCount do
+            cachedWidth = math.max(rows[i].cumulativeWidth, cachedWidth)
+        end
+
+        local lastRow = rows[#rows]
+        
+        cachedHeight = lastRow.verticalOffset + lastRow.maxHeight + (rowCount > 1 and verticalSpacing() or 0)
+
+        self._rows = rows
+        
+        return cachedWidth, cachedHeight
+    end
+    function wrap:Position(x, y)
+        for rowIndex, row in ipairs(rows) do
+            for itemIndex, item in ipairs(row) do
+                item:Position(
+                    x + item._horizontalWrap_xOffset + (cachedWidth - row.cumulativeWidth) * xAnchor, 
+                    y + cachedHeight - row.verticalOffset - row.maxHeight
+                )
+            end
+        end
     end
 
-    if not MasterFramework.areComplexElementsAvailable then
-        error("[Master Custom Stats] MasterFramework complex elements not found!")
+    return wrap
+end
+    
+function widget:Initialize()
+    MasterFramework = WG["MasterFramework " .. requiredFrameworkVersion]
+    if not MasterFramework then
+        error("[" .. widget:GetInfo().name .. "] MasterFramework " .. requiredFrameworkVersion .. " not found!")
     end
+    
+    table = MasterFramework.table
+    reduce = table.reduce
 
     stepInterval = MasterFramework:Dimension(50)
 
@@ -511,28 +742,64 @@ function widget:Initialize()
         0
     )
 
+    graphLinesMenu = HorizontalWrap({}, MasterFramework:Dimension(8), MasterFramework:Dimension(2), 0.5, 0.5)
+
+    logarithmicCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsLogarithmic(checked) end)
+    deltaCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsDelta(checked) end)
+
     local split = MasterFramework:HorizontalStack(
         { 
-            menu,
-            MasterFramework:MarginAroundRect(
-                uiGraph,
-                MasterFramework:Dimension(0),
-                MasterFramework:Dimension(0),
-                MasterFramework:Dimension(0),
-                MasterFramework:Dimension(0),
-                { MasterFramework:Color(0, 0, 0, 0.7) },
-                MasterFramework:Dimension(0),
-                false
-                -- false
+            MasterFramework:VerticalScrollContainer(
+                MasterFramework:MarginAroundRect(
+                    menu,
+                    MasterFramework:Dimension(0),
+                    MasterFramework:Dimension(0),
+                    MasterFramework:Dimension(0),
+                    MasterFramework:Dimension(0),
+                    {},
+                    MasterFramework:Dimension(0),
+                    false
+                    -- false
+                )
+            ),
+            MasterFramework:VerticalHungryStack(
+                MasterFramework:HorizontalStack({
+                        logarithmicCheckBox, MasterFramework:Text("Logarithmic"),
+                        deltaCheckBox, MasterFramework:Text("Delta")
+                    },
+                    MasterFramework:Dimension(8),
+                    0.5
+                ),
+                MasterFramework:MarginAroundRect(
+                    uiGraph,
+                    MasterFramework:Dimension(0),
+                    MasterFramework:Dimension(0),
+                    MasterFramework:Dimension(0),
+                    MasterFramework:Dimension(0),
+                    { MasterFramework:Color(0, 0, 0, 0.7) },
+                    MasterFramework:Dimension(0),
+                    false
+                    -- false
+                ),
+                MasterFramework:MarginAroundRect(
+                    graphLinesMenu,
+                    MasterFramework:Dimension(20),
+                    MasterFramework:Dimension(20),
+                    MasterFramework:Dimension(20),
+                    MasterFramework:Dimension(20),
+                    {},
+                    MasterFramework:Dimension(0),
+                    false
+                ),
+                0.5
             )
         },
-        MasterFramework:Dimension(8), 
+        MasterFramework:Dimension(8),
         1
     )
 
     local resizableFrame = MasterFramework:ResizableMovableFrame(
-        -- "MasterCustomStats StatsFrame",
-        nil,
+        "MasterCustomStats StatsFrame",
         MasterFramework:PrimaryFrame(
             MasterFramework:MarginAroundRect(
                 split,
@@ -547,7 +814,7 @@ function widget:Initialize()
                 -- false
             )
         ),
-        MasterFramework.viewportWidth * 0.1, MasterFramework.viewportHeight * 0.1, 
+        MasterFramework.viewportWidth * 0.2, MasterFramework.viewportHeight * 0.9, 
         MasterFramework.viewportWidth * 0.8, MasterFramework.viewportHeight * 0.8,
         false
     )
@@ -557,11 +824,13 @@ function widget:Initialize()
         "Stats",
         MasterFramework.layerRequest.top()
     )
-
-    WG.MasterStats = API
 end
 
 function widget:Shutdown() 
+    for _, object in ipairs(objectsToDelete) do
+        object:Delete()
+    end
+
     MasterFramework:RemoveElement(key)
     WG.MasterStats = nil
 end
