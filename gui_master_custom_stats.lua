@@ -156,188 +156,6 @@ local function ContinuousGraphKeys(min, max, stepCount, roundPow10, isLogarithmi
     return steps
 end
 
-local first = true
-
-local function UIGraphData(data, xKeyStepCount, yKeyStepCount)
-    local uiGraphData = { data = data }
-
-    local cachedWidth, cahcedHeight
-    function uiGraphData:Layout(availableWidth, availableHeight)
-        cachedWidth = availableWidth
-        cachedHeight = availableHeight
-    end
-
-    local cachedX, cachedY
-    function uiGraphData:Position(x, y)
-        cachedX = x
-        cachedY = y
-
-        table.insert(MasterFramework.activeDrawingGroup.drawTargets, self)
-    end
-
-    local function DrawGraphData(line, pixelWidth)
-        local color = line.color
-        gl_Color(color.r, color.g, color.b, color.a)
-
-        local vertexCount = #line.vertices.x
-        local vertices = line.vertices
-        local lastDrawnX = -1
-        local firstX = vertices.x[1]
-        local firstY = vertices.y[1]
-        local lastX = vertices.x[vertexCount]
-        local lastY = vertices.y[vertexCount]
-
-        lastDrawnY = firstY
-        vertex(firstX, firstY)
-
-        local xPerPixelWidth = (lastX - firstX) / pixelWidth
-        
-        for i = 2, vertexCount do
-            if vertices.x[i] > lastDrawnX + xPerPixelWidth then
-                if data.discrete then
-                    vertex(vertices.x[i], vertices.y[i - 1])
-                end
-                vertex(vertices.x[i], vertices.y[i])
-                lastDrawnX = i
-            end
-        end
-
-        vertex(lastX, lastY)
-        if data.discrete then
-            vertex(data.maxX, lastY)
-        end
-    end
-    
-    -- Draw
-
-    local vboDefinition = { { id = 0, name = "custom_stats_graph_line", size = 2 } }
-    local function DrawGraphDataGL4(line, pixelWidth)
-        local vboData = {}
-
-        local color = line.color
-        gl_Color(color.r, color.g, color.b, color.a)
-        
-        local vertexCount = #line.vertices.x
-        local vertices = line.vertices
-        local lastDrawnX = -1
-        local firstX = vertices.x[1]
-        local firstY = vertices.y[1]
-        local lastX = vertices.x[vertexCount]
-        local lastY = vertices.y[vertexCount]
-
-        vboData[1] = firstX
-        vboData[2] = firstY
-        local dataCount = 2
-
-        local xPerPixelWidth = (lastX - firstX) / pixelWidth
-        
-        for i = 2, vertexCount do
-            if vertices.x[i] > lastDrawnX + xPerPixelWidth then
-                if data.discrete then
-                    dataCount = dataCount + 1
-                    vboData[dataCount] = vertices.x[i]
-                    dataCount = dataCount + 1
-                    vboData[dataCount] = vertices.y[i - 1]
-                end
-                dataCount = dataCount + 1
-                vboData[dataCount] = vertices.x[i]
-                dataCount = dataCount + 1
-                vboData[dataCount] = vertices.y[i]
-                lastDrawnX = i
-            end
-        end
-
-        dataCount = dataCount + 1
-        vboData[dataCount] = lastX
-        dataCount = dataCount + 1
-        vboData[dataCount] = lastY
-        if data.discrete then
-            dataCount = dataCount + 1
-            vboData[dataCount] = data.maxX
-            dataCount = dataCount + 1
-            vboData[dataCount] = lastY
-        end
-
-        local verticesVBO = gl.GetVBO()
-        local verticesVAO = gl.GetVAO()
-
-        verticesVBO:Define(#vboData / 2, vboDefinition)
-        verticesVBO:Upload(vboData)
-        verticesVAO:AttachVertexBuffer(verticesVBO)
-        
-        verticesVAO:DrawArrays(GL.LINE_STRIP, #vboData / 2, 0)
-
-        verticesVBO:Delete()
-        verticesVAO:Delete()
-    end
-
-    local function DrawGraphEdges()
-        gl_Color(1, 1, 1, 1)
-        gl_Vertex(0, 0)
-        gl_Vertex(0, cachedHeight)
-        gl_Vertex(0, 0)
-        gl_Vertex(cachedWidth, 0)
-    end
-
-
-    local function DrawGraphHorizontalLines(xKeySeparation, yKeySeparation)
-        gl_Color(0.5, 0.5, 0.5, 1)
-        local xKeySeparation = cachedWidth / xKeyStepCount
-        local yKeySeparation = cachedHeight / yKeyStepCount
-
-        for i = 1, xKeyStepCount do
-            local xOffset = xKeySeparation * i
-            gl_Vertex(xOffset, 0)
-            gl_Vertex(xOffset, cachedHeight)
-        end 
-        for i = 1, yKeyStepCount do
-            local yOffset = yKeySeparation * i
-            gl_Vertex(0, yOffset)
-            gl_Vertex(cachedWidth, yOffset)
-        end
-    end
-
-    function uiGraphData:Draw()
-
-        local data = self.data
-
-        gl_PushMatrix()
-
-        gl_LineWidth(1)
-
-        gl_Translate(cachedX, cachedY, 0)
-
-        gl_BeginEnd(GL_LINES, DrawGraphHorizontalLines)
-        
-        gl_PushMatrix()
-        if data.showAsLogarithmic then
-            gl_Scale(cachedWidth / (data.maxX - data.minX), cachedHeight / (math_log(data.maxY)), 1)
-        else
-            gl_Scale(cachedWidth / (data.maxX - data.minX), cachedHeight / (data.maxY - data.minY), 1)
-        end
-        for _, line in ipairs(data.lines) do
-            -- local color = line.color
-            -- gl_Color(color.r, color.g, color.b, color.a)
-            -- gl_Shape(GL_LINE_STRIP, table.imap(line.vertices, X))
-            -- Thought that would be faster, but it seems to be something like 10% slower. Yay. But testing it on like 9 data points so who knows.
-            if not line.hidden then
-                if gl4 then
-                    DrawGraphDataGL4(line, cachedWidth)
-                else
-                    gl_BeginEnd(GL_LINE_STRIP, DrawGraphData, line, cachedWidth)
-                end
-            end
-        end
-        gl_PopMatrix()
-
-        gl_BeginEnd(GL_LINES, DrawGraphEdges)
-        
-        gl_PopMatrix()
-    end
-
-    return uiGraphData
-end
-
 local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
     local graph = {}
@@ -368,10 +186,16 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
     -- Generate Data
 
+    local vertexCounts = {}
     local vertexXCoordinates = {}
     local vertexYCoordinates = {}
     local minY
     local maxY
+    local magnitude
+    local cachedWidth, cachedHeight
+    local verticalRatio
+
+    local mouseY = 1000
 
     local lastDrawnY
     -- local function gl_Vertex_Delta(x, y, vertexFunc)
@@ -381,17 +205,25 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
     --     gl_Vertex(x, math_max(0, math_log(y)))
     -- end
 
-    local function vertex(x, y, lineXCoordinates, lineYCoordinates)
-        if uiGraphData.data.showAsDelta then
+    local function vertex(x, y, line)
+        if data.showAsDelta then
             local _lastDrawnY = y
             y = y - lastDrawnY
             lastDrawnY = _lastDrawnY
         end
-        if uiGraphData.data.showAsLogarithmic then
-            y = math_max(0, math_log(y))
+        if data.showAsLogarithmic then
+            if y >= 1 then
+                y = math_max(0, math_log(y))
+            elseif y <= -1 then
+                y = -math_max(0, math_log(-y))
+            else
+                y = 0
+            end
         end
-        vertexXCoordinates[#vertexXCoordinates + 1] = x
-        vertexYCoordinates[#vertexYCoordinates + 1] = y
+        vertexXCoordinates[line][vertexCounts[line] + 1] = x
+        vertexYCoordinates[line][vertexCounts[line] + 1] = y
+
+        vertexCounts[line] = vertexCounts[line] + 1
 
         minY = math_min(y, minY)
         maxY = math_max(y, maxY)
@@ -407,23 +239,23 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
         local lastY = vertices.y[vertexCount]
 
         lastDrawnY = firstY
-        vertex(firstX, firstY)
+        vertex(firstX, firstY, line)
 
         local xPerPixelWidth = (lastX - firstX) / pixelWidth
         
         for i = 2, vertexCount do
             if vertices.x[i] > lastDrawnX + xPerPixelWidth then
                 if data.discrete then
-                    vertex(vertices.x[i], vertices.y[i - 1])
+                    vertex(vertices.x[i], vertices.y[i - 1], line)
                 end
-                vertex(vertices.x[i], vertices.y[i])
+                vertex(vertices.x[i], vertices.y[i], line)
                 lastDrawnX = i
             end
         end
 
-        vertex(lastX, lastY)
+        vertex(lastX, lastY, line)
         if data.discrete then
-            vertex(data.maxX, lastY)
+            vertex(data.maxX, lastY, line)
         end
     end
 
@@ -440,78 +272,145 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
         return math_max(currentValue, height)
     end
 
+    local font = MasterFramework.defaultFont
+    local color = MasterFramework:Color(0.3, 0.3, 0.3, 1)
+
+    local topText = MasterFramework:Text("", color, font)
+    local zeroText = MasterFramework:Text("0", color, font)
+    local bottomText = MasterFramework:Text("", color, font)
+
+    local mouseText = MasterFramework:Text("", color, font)
+    local indent = MasterFramework:Dimension(2)
+
     function graph:Layout(availableWidth, availableHeight)
-        local uiXKeyTitles = ContinuousGraphKeys(data.minX, data.maxX, xKeyStepCount + 1, -1)
-        local uiYKeyTitles = ContinuousGraphKeys(data.minY, data.maxY, yKeyStepCount + 1, -1, data.showAsLogarithmic)
+        minY = math.huge
+        maxY = -math.huge
 
-        for index, keyName in ipairs(uiXKeyTitles) do
-            local key = uiXKeys[index]
-            if key then
-                key.label:SetString(keyName)
-            else
-                local label = MasterFramework:Text(keyName)
-                key = MasterFramework:MarginAroundRect(label, keyPadding, keyPadding, keyPadding, keyPadding)
-                key.label = label
-            end
-            key:Layout(math.huge, math.huge)
+        for _, line in ipairs(data.lines) do
+            if not line.hidden then
+                vertexCounts[line] = 0
+                if not vertexXCoordinates[line] then
+                    vertexXCoordinates[line] = {}
+                    vertexYCoordinates[line] = {}
+                end
 
-            uiXKeys[index] = key
-        end
+                GenerateLineData(line, availableWidth)
 
-        if #uiXKeyTitles < #uiXKeys then
-            for i = #uiXKeys + 1, #uiXKeyTitles do
-                uiXKeys[i] = nil
+                for i = vertexCounts[line] + 1, #vertexXCoordinates[line] do
+                    vertexXCoordinates[line][i] = nil
+                    vertexYCoordinates[line][i] = nil
+                end
             end
         end
 
-        for index, keyName in ipairs(uiYKeyTitles) do
-            local key = uiYKeys[index]
-            if key then
-                key.label:SetString(keyName)
-            else
-                local label = MasterFramework:Text(keyName)
-                key = MasterFramework:MarginAroundRect(label, keyPadding, keyPadding, keyPadding, keyPadding)
-                key.label = label
-            end
+        verticalRatio = (maxY - minY) / availableHeight
 
-            key:Layout(math.huge, math.huge)
+        magnitude = (maxY - minY) / 5
 
-            uiYKeys[index] = key
+        cachedWidth = availableWidth
+        cachedHeight = availableHeight
+
+        if minY < 0 and maxY > 0 then
+            zeroText:Layout(availableWidth, font:ScaledSize())
         end
 
-        if #uiYKeyTitles < #uiYKeys then
-            for i = #uiYKeys + 1, #uiYKeyTitles do
-                uiYKeys[i] = nil
-            end
+        if data.showAsLogarithmic then
+            topText:SetString(tostring(math.exp(maxY)))
+            bottomText:SetString(tostring(-math.exp(-minY)))
+
+            -- mouseText:SetString(tostring(minY + verticalRatio * mouseY))
+        else
+            topText:SetString(tostring(maxY))
+            bottomText:SetString(tostring(minY))
+            -- mouseText:SetString(tostring(minY + verticalRatio * mouseY))
         end
 
-        maxYKeyWidth = reduce(uiYKeys, -math_huge, maxWidth)
-        maxXKeyHeight = reduce(uiXKeys, -math_huge, maxHeight)
-
-        graphBaseline = maxXKeyHeight
-        graphSideline = maxYKeyWidth
-        graphWidth = availableWidth - 2 * graphSideline
-        graphHeight = availableHeight - 2 * graphBaseline
-
-        uiGraphData:Layout(graphWidth, graphHeight)
-
+        topText:Layout(availableWidth, font:ScaledSize())
+        bottomText:Layout(availableWidth, font:ScaledSize())
+        mouseText:Layout(availableWidth, font:ScaledSize())
+        
         return availableWidth, availableHeight
     end
 
     function graph:Position(x, y)
-        local xKeySeparation = graphWidth / xKeyStepCount
-        local yKeySeparation = graphHeight / yKeyStepCount
-
-        for index, key in ipairs(uiXKeys) do
-            local width, height = key:Layout(math.huge, math.huge)
-            key:Position(x + (index - 1) * xKeySeparation + graphSideline - width / 2, y + graphBaseline - height)
-        end
-        for index, key in ipairs(uiYKeys) do
-            local width, height = key:Layout(math.huge, math.huge)
-            key:Position(x + graphSideline - width, y + (index - 1) * yKeySeparation + graphBaseline - height / 2)
+        if minY < 0 and maxY > 0 then
+            zeroText:Position(x + indent(), y - minY / verticalRatio)
         end
 
-        uiGraphData:Position(x + graphSideline, y + graphBaseline)
+        topText:Position(x + indent(), y + cachedHeight - font:ScaledSize())
+        bottomText:Position(x + indent(), y)
+
+        mouseText:Position(x + indent(), y + (minY - mouseY * verticalRatio))
+
+        cachedX = x
+        cachedY = y
+
+        table.insert(MasterFramework.activeDrawingGroup.drawTargets, self)
+    end
+
+    local function DrawGraphHorizontalLines()
+        gl_Color(0.5, 0.5, 0.5, 1)
+        if minY < 0 and maxY > 0 then
+            gl_Vertex(0, -minY / verticalRatio)
+            gl_Vertex(cachedWidth, -minY / verticalRatio)
+        end
+
+        gl_Vertex(0, cachedHeight)
+        gl_Vertex(cachedWidth, cachedHeight)
+    end
+
+    local function DrawGraphEdges()
+        gl_Color(1, 1, 1, 1)
+        gl_Vertex(0, 0)
+        gl_Vertex(0, cachedHeight)
+        gl_Vertex(0, 0)
+        gl_Vertex(cachedWidth, 0)
+    end
+
+    local function DrawGraphData(line, cachedWidth)
+        local color = line.color
+        gl_Color(color.r, color.g, color.b, color.a)
+
+        local lineVertexXCoordinates = vertexXCoordinates[line]
+        local lineVertexYCoordinates = vertexYCoordinates[line]
+
+        for i = 1, #lineVertexXCoordinates do
+            gl_Vertex(lineVertexXCoordinates[i], lineVertexYCoordinates[i])
+        end
+    end
+
+    function graph:Draw()
+        gl_PushMatrix()
+
+        gl_LineWidth(1)
+
+        gl_Translate(cachedX, cachedY, 0)
+
+        gl_BeginEnd(GL_LINES, DrawGraphHorizontalLines)
+        
+        gl_PushMatrix()
+
+        gl_Scale(cachedWidth / (data.maxX - data.minX), cachedHeight / (maxY - minY), 1)
+        gl_Translate(0, -minY, 0)
+
+        for _, line in ipairs(data.lines) do
+            -- local color = line.color
+            -- gl_Color(color.r, color.g, color.b, color.a)
+            -- gl_Shape(GL_LINE_STRIP, table.imap(line.vertices, X))
+            -- Thought that would be faster, but it seems to be something like 10% slower. Yay. But testing it on like 9 data points so who knows.
+            if not line.hidden then
+                if gl4 then
+                    -- DrawGraphDataGL4(line, cachedWidth)
+                else
+                    gl_BeginEnd(GL_LINE_STRIP, DrawGraphData, line, cachedWidth)
+                end
+            end
+        end
+        gl_PopMatrix()
+
+        gl_BeginEnd(GL_LINES, DrawGraphEdges)
+        
+        gl_PopMatrix()
     end
 
     return graph
@@ -539,7 +438,6 @@ local function UISectionedButtonList(name, options, action)
         local button = MasterFramework:Button(
             MasterFramework:Text(optionName),
             function(self)
-                first = true
                 -- self.margin.background = MasterFramework:Color(0.66, 1, 1, 0.66) -- SelectedColor
                 action(name, optionName)
             end
