@@ -96,7 +96,7 @@ local graphData = {
 ------------------------------------------------------------------------------------------------------------
 
 local MasterFramework
-local requiredFrameworkVersion = 42
+local requiredFrameworkVersion = "Dev"
 local key
 
 local math_huge = math.huge
@@ -158,7 +158,7 @@ end
 
 local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
-    local graph = {}
+    local graph = MasterFramework:Component(true, false)
 
     -- local uiGraphData = UIGraphData(data, xKeyStepCount, yKeyStepCount)
 
@@ -261,7 +261,7 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
     -- Layout, Position & Draw
 
-    local keyPadding = MasterFramework:Dimension(10)
+    local keyPadding = MasterFramework:AutoScalingDimension(10)
 
     local function maxWidth(currentValue, nextValue)
         local width, _ = nextValue:Layout(math_huge, math_huge)
@@ -280,9 +280,11 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
     local bottomText = MasterFramework:Text("", color, font)
 
     local mouseText = MasterFramework:Text("", color, font)
-    local indent = MasterFramework:Dimension(2)
+    local indent = MasterFramework:AutoScalingDimension(2)
 
     function graph:Layout(availableWidth, availableHeight)
+        self:RegisterDrawingGroup()
+        self:NeedsLayout()
         minY = math.huge
         maxY = -math.huge
 
@@ -430,7 +432,7 @@ local uiCategories = {}
 local refreshRequested = true
 
 local function UISectionedButtonList(name, options, action)
-    local padding = MasterFramework:Dimension(8)
+    local padding = MasterFramework:AutoScalingDimension(8)
 
     local newButtons = {}
 
@@ -516,9 +518,9 @@ function widget:Update()
                         return MasterFramework:HorizontalStack(
                             {
                                 checkbox,
-                                line.title and MasterFramework:Text(line.title, color) or MasterFramework:Rect(MasterFramework:Dimension(20), MasterFramework:Dimension(12), MasterFramework:Dimension(3), { color })
+                                line.title and MasterFramework:Text(line.title, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3))
                             },
-                            MasterFramework:Dimension(8),
+                            MasterFramework:AutoScalingDimension(8),
                             0.5
                         )
                     end)
@@ -528,9 +530,9 @@ function widget:Update()
 
         table.sort(uiCategories, function(a, b) return a.name < b.name end)
 
-        menu.members = table.imap(uiCategories, function(_, value)
+        menu:SetMembers(table.imap(uiCategories, function(_, value)
             return value.list
-        end)
+        end))
 
         refreshRequested = nil
     end
@@ -626,7 +628,7 @@ function widget:Initialize()
     table = MasterFramework.table
     reduce = table.reduce
 
-    stepInterval = MasterFramework:Dimension(50)
+    stepInterval = MasterFramework:AutoScalingDimension(50)
 
     uiGraph = UIGraph(
         graphData,
@@ -636,11 +638,11 @@ function widget:Initialize()
 
     menu = MasterFramework:VerticalStack(
         {},
-        MasterFramework:Dimension(8),
+        MasterFramework:AutoScalingDimension(8),
         0
     )
 
-    graphLinesMenu = HorizontalWrap({}, MasterFramework:Dimension(8), MasterFramework:Dimension(2), 0.5, 0.5)
+    graphLinesMenu = HorizontalWrap({}, MasterFramework:AutoScalingDimension(8), MasterFramework:AutoScalingDimension(2), 0.5, 0.5)
 
     logarithmicCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsLogarithmic(checked) end)
     deltaCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsDelta(checked) end)
@@ -650,14 +652,10 @@ function widget:Initialize()
             MasterFramework:VerticalScrollContainer(
                 MasterFramework:MarginAroundRect(
                     menu,
-                    MasterFramework:Dimension(0),
-                    MasterFramework:Dimension(0),
-                    MasterFramework:Dimension(0),
-                    MasterFramework:Dimension(0),
-                    {},
-                    MasterFramework:Dimension(0),
-                    false
-                    -- false
+                    MasterFramework:AutoScalingDimension(0),
+                    MasterFramework:AutoScalingDimension(0),
+                    MasterFramework:AutoScalingDimension(0),
+                    MasterFramework:AutoScalingDimension(0)
                 )
             ),
             MasterFramework:VerticalHungryStack(
@@ -665,51 +663,48 @@ function widget:Initialize()
                         logarithmicCheckBox, MasterFramework:Text("Logarithmic"),
                         deltaCheckBox, MasterFramework:Text("Delta")
                     },
-                    MasterFramework:Dimension(8),
+                    MasterFramework:AutoScalingDimension(8),
                     0.5
                 ),
-                MasterFramework:MarginAroundRect(
-                    uiGraph,
-                    MasterFramework:Dimension(0),
-                    MasterFramework:Dimension(0),
-                    MasterFramework:Dimension(0),
-                    MasterFramework:Dimension(0),
-                    { MasterFramework:Color(0, 0, 0, 0.7) },
-                    MasterFramework:Dimension(0),
-                    false
-                    -- false
+                MasterFramework:Background(
+                    MasterFramework:MarginAroundRect(
+                        -- uiGraph,
+                        MasterFramework:DrawingGroup(uiGraph, true),
+                        MasterFramework:AutoScalingDimension(0),
+                        MasterFramework:AutoScalingDimension(0),
+                        MasterFramework:AutoScalingDimension(0),
+                        MasterFramework:AutoScalingDimension(0)
+                    ),
+                    { MasterFramework.color.baseBackgroundColor },
+                    MasterFramework:AutoScalingDimension(0)
                 ),
                 MasterFramework:MarginAroundRect(
                     graphLinesMenu,
-                    MasterFramework:Dimension(20),
-                    MasterFramework:Dimension(20),
-                    MasterFramework:Dimension(20),
-                    MasterFramework:Dimension(20),
-                    {},
-                    MasterFramework:Dimension(0),
-                    false
+                    MasterFramework:AutoScalingDimension(20),
+                    MasterFramework:AutoScalingDimension(20),
+                    MasterFramework:AutoScalingDimension(20),
+                    MasterFramework:AutoScalingDimension(20)
                 ),
                 0.5
             )
         },
-        MasterFramework:Dimension(8),
+        MasterFramework:AutoScalingDimension(8),
         1
     )
 
     local resizableFrame = MasterFramework:ResizableMovableFrame(
         "MasterCustomStats StatsFrame",
         MasterFramework:PrimaryFrame(
-            MasterFramework:MarginAroundRect(
-                split,
-                MasterFramework:Dimension(20),
-                MasterFramework:Dimension(20),
-                MasterFramework:Dimension(20),
-                MasterFramework:Dimension(20),
-                { MasterFramework:Color(0, 0, 0, 0.7) },
-                MasterFramework:Dimension(5),
-                -- MasterFramework:Dimension(0),
-                false
-                -- false
+            MasterFramework:Background(
+                MasterFramework:MarginAroundRect(
+                    split,
+                    MasterFramework:AutoScalingDimension(20),
+                    MasterFramework:AutoScalingDimension(20),
+                    MasterFramework:AutoScalingDimension(20),
+                    MasterFramework:AutoScalingDimension(20)
+                ),
+                { MasterFramework.color.baseBackgroundColor },
+                MasterFramework:AutoScalingDimension(5)
             )
         ),
         MasterFramework.viewportWidth * 0.2, MasterFramework.viewportHeight * 0.9, 
