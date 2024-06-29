@@ -245,7 +245,7 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
         
         for i = 2, vertexCount do
             if vertices.x[i] > lastDrawnX + xPerPixelWidth then
-                if data.discrete then
+                if data.discrete and not data.showAsDelta then
                     vertex(vertices.x[i], vertices.y[i - 1], line)
                 end
                 vertex(vertices.x[i], vertices.y[i], line)
@@ -254,7 +254,7 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
         end
 
         vertex(lastX, lastY, line)
-        if data.discrete then
+        if data.discrete and not data.showAsDelta then
             vertex(data.maxX, lastY, line)
         end
     end
