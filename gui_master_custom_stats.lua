@@ -99,8 +99,6 @@ local MasterFramework
 local requiredFrameworkVersion = "Dev"
 local key
 
-local math_huge = math.huge
-
 local math_max = math.max
 local math_min = math.min
 local math_log = math.log
@@ -114,6 +112,7 @@ local gl_Color = gl.Color
 local gl_LineWidth = gl.LineWidth
 local gl_PopMatrix = gl.PopMatrix
 local gl_PushMatrix = gl.PushMatrix
+local gl_Rect = gl.Rect
 local gl_Scale = gl.Scale
 local gl_Shape = gl.Shape
 local gl_Translate = gl.Translate
@@ -158,7 +157,7 @@ end
 
 local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
-    local graph = MasterFramework:Component(true, false)
+    local graph = MasterFramework:Component(true, true)
 
     -- local uiGraphData = UIGraphData(data, xKeyStepCount, yKeyStepCount)
 
@@ -186,18 +185,106 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
     -- Generate Data
 
+    local selectionAnchor
+    local selectionLimit
+
+    local overlay
+
     local vertexCounts = {}
     local vertexXCoordinates = {}
     local vertexYCoordinates = {}
     local minY
     local maxY
     local magnitude
+    local cachedX, cachedX
     local cachedWidth, cachedHeight
     local verticalRatio
 
     local mouseY = 1000
 
     local lastDrawnY
+
+    function graph:Select(anchor, limit)
+        if selectionAnchor ~= anchor or selectionLimit ~= limit then
+            selectionAnchor = anchor
+            selectionLimit = limit
+            self:NeedsRedraw()
+
+            if anchor then
+                local overlayX
+                local overlayY = cachedY + cachedHeight
+                if selectionLimit and selectionLimit < selectionAnchor then
+                    overlayX = cachedX + selectionLimit
+                else
+                    overlayX = cachedX + selectionAnchor
+                end
+
+                if overlay then
+                    overlay:SetOffsets(overlayX, overlayY)
+                else
+                    local stackMembers = table.imap(data.lines, function(_, line)
+                        local valueText = MasterFramework:Text("")
+                        local member = MasterFramework:HorizontalStack(
+                            { MasterFramework:Text(line.title, MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)), valueText },
+                            MasterFramework:AutoScalingDimension(2),
+                            0
+                        )
+
+                        function member:Update(scaledAnchor, scaledLimit)
+                            local i = 1
+                            while scaledAnchor < line.vertices.x[i] do
+                                i = i + 1
+                            end
+                            local _string = scaledAnchor .. ": " .. (line.vertices.y[i - 1] or "???")
+
+                            if scaledLimit then
+                                i = 1
+                                while scaledLimit < line.vertices.x[i] do
+                                    i = i + 1
+                                end
+                                local limitString = scaledLimit .. ": " .. (line.vertices.y[i - 1] or "???")
+
+                                if scaledLimit < scaledAnchor then
+                                    _string = limitString .. ", " .. _string
+                                else
+                                    _string = _string .. ", " .. limitString
+                                end
+                            end
+
+                            valueText:SetString(_string)
+                        end
+
+                        return member
+                    end)
+                    overlay = MasterFramework:AbsoluteOffsetFromTopLeft(MasterFramework:PrimaryFrame(MasterFramework:Background(
+                        MasterFramework:MarginAroundRect(
+                            MasterFramework:VerticalStack(stackMembers, MasterFramework:AutoScalingDimension(2), 0)
+                        ),
+                        { MasterFramework.color.baseBackgroundColor },
+                        MasterFramework:AutoScalingDimension(5)
+                    )), overlayX, overlayY)
+                    overlay.stackMembers = stackMembers
+
+                    local key = MasterFramework:InsertElement(overlay, "Graph Overlay", MasterFramework.layerRequest.top())
+                    overlay.key = key
+                end
+
+                local xScale = cachedWidth / (data.maxX - data.minX)
+                for _, member in ipairs(overlay.stackMembers) do
+                    member:Update(xScale * anchor, limit and (limit * xScale))
+                end
+            else
+                if overlay then
+                    MasterFramework:RemoveElement(overlay.key)
+                    overlay = nil
+                end
+            end
+        end
+    end
+    function graph:GetSelection()
+        return selectionAnchor, selectionLimit
+    end
+
     -- local function gl_Vertex_Delta(x, y, vertexFunc)
     --     vertexFunc(x, y - lastY)
     -- end
@@ -263,15 +350,6 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
     local keyPadding = MasterFramework:AutoScalingDimension(10)
 
-    local function maxWidth(currentValue, nextValue)
-        local width, _ = nextValue:Layout(math_huge, math_huge)
-        return math_max(currentValue, width)
-    end
-    local function maxHeight(currentValue, nextValue)
-        local _, height = nextValue:Layout(math_huge, math_huge)
-        return math_max(currentValue, height)
-    end
-
     local font = MasterFramework.defaultFont
     local color = MasterFramework:Color(0.3, 0.3, 0.3, 1)
 
@@ -279,7 +357,6 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
     local zeroText = MasterFramework:Text("0", color, font)
     local bottomText = MasterFramework:Text("", color, font)
 
-    local mouseText = MasterFramework:Text("", color, font)
     local indent = MasterFramework:AutoScalingDimension(2)
 
     function graph:Layout(availableWidth, availableHeight)
@@ -319,17 +396,13 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
         if data.showAsLogarithmic then
             topText:SetString(tostring(math.exp(maxY)))
             bottomText:SetString(tostring(-math.exp(-minY)))
-
-            -- mouseText:SetString(tostring(minY + verticalRatio * mouseY))
         else
             topText:SetString(tostring(maxY))
             bottomText:SetString(tostring(minY))
-            -- mouseText:SetString(tostring(minY + verticalRatio * mouseY))
         end
 
         topText:Layout(availableWidth, font:ScaledSize())
         bottomText:Layout(availableWidth, font:ScaledSize())
-        mouseText:Layout(availableWidth, font:ScaledSize())
         
         return availableWidth, availableHeight
     end
@@ -341,8 +414,6 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
         topText:Position(x + indent(), y + cachedHeight - font:ScaledSize())
         bottomText:Position(x + indent(), y)
-
-        mouseText:Position(x + indent(), y + (minY - mouseY * verticalRatio))
 
         cachedX = x
         cachedY = y
@@ -382,11 +453,23 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
     end
 
     function graph:Draw()
+        self:RegisterDrawingGroup()
         gl_PushMatrix()
 
         gl_LineWidth(1)
 
         gl_Translate(cachedX, cachedY, 0)
+
+        if selectionAnchor then
+            gl_Color(0.25, 0.25, 0.25, 1)
+            if not selectionLimit or selectionAnchor == selectionLimit then
+                gl_Rect(selectionAnchor, 0, selectionAnchor + 1, cachedHeight)
+            elseif selectionAnchor > selectionLimit then
+                gl_Rect(selectionLimit, 0, selectionAnchor, cachedHeight)
+            else -- selectionAnchor < selectionLimit
+                gl_Rect(selectionAnchor, 0, selectionLimit, cachedHeight)
+            end
+        end
 
         gl_BeginEnd(GL_LINES, DrawGraphHorizontalLines)
         
@@ -668,8 +751,39 @@ function widget:Initialize()
                 ),
                 MasterFramework:Background(
                     MasterFramework:MarginAroundRect(
-                        -- uiGraph,
-                        MasterFramework:DrawingGroup(uiGraph, true),
+                        MasterFramework:MouseOverResponder(
+                            MasterFramework:MousePressResponder(
+                                MasterFramework:DrawingGroup(uiGraph, true),
+                                function(responder, x, y, button)
+                                    local baseX, _ = responder:CachedPosition()
+                                    uiGraph:Select(x - baseX)
+                                    return true
+                                end,
+                                function(responder, x, y, dx, dy, button)
+                                    local responderX, _, responderWidth, _ = responder:Geometry()
+                                    if button == 1 then
+                                        local baseX, _ = responder:CachedPosition()
+                                        local selectionAnchor, _ = uiGraph:GetSelection()
+                                        uiGraph:Select(selectionAnchor, math.max(math.min(x - baseX, responderWidth), 0))
+                                    end
+                                end,
+                                function(responder, x, y, button) end
+                            ),
+                            function(responder, x, y)
+                                local _, selectionLimit = uiGraph:GetSelection()
+                                if not selectionLimit then
+                                    local baseX, _ = responder:CachedPosition()
+                                    uiGraph:Select(x - baseX)
+                                end
+                            end,
+                            function() end,
+                            function()
+                                local _, selectionLimit = uiGraph:GetSelection()
+                                if not selectionLimit then
+                                    uiGraph:Select()
+                                end
+                            end
+                        ),
                         MasterFramework:AutoScalingDimension(0),
                         MasterFramework:AutoScalingDimension(0),
                         MasterFramework:AutoScalingDimension(0),
