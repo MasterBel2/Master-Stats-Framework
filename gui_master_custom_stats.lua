@@ -18,7 +18,7 @@ end
 --[[
     To Display Your Graph Here: Implement `function widget:MasterStatsCategories()`
 
-    This widget should return a table of categories, where: 
+    This function should return a table of categories, where: 
     - the key for each category should be a human-readable string, that will be case-sensitively merged with categories from other widgets.
     - the value for each category should be a table of graphs, where:
       - the key for each graph should be a unique human-readable string that will be used as the graph's title on-screen
