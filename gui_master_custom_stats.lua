@@ -188,8 +188,6 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
     local selectionAnchor
     local selectionLimit
 
-    local overlay
-
     local vertexCounts = {}
     local vertexXCoordinates = {}
     local vertexYCoordinates = {}
@@ -203,6 +201,19 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
     local mouseY = 1000
 
     local lastDrawnY
+
+    local function format(number)
+        local thousandsMagnitude = math.floor(math.log(number)/math.log(1000))
+        local tensMagnitude = math.floor(math.log(number)/math.log(10))
+        local magnitudeSuffix = {
+            [1] = "k",
+            [2] = "M",
+            [3] = "B",
+            [4] = "T"
+        }
+        local result = math.floor(number * math.pow(10, 1 - tensMagnitude) + 0.5) / math.pow(10, 1 - (tensMagnitude - math.max(0, thousandsMagnitude) * 3)) .. (magnitudeSuffix[thousandsMagnitude] or "")
+        return result
+    end
 
     function graph:Select(anchor, limit)
         if selectionAnchor ~= anchor or selectionLimit ~= limit then
@@ -219,13 +230,13 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
                     overlayX = cachedX + selectionAnchor
                 end
 
-                if overlay then
-                    overlay:SetOffsets(overlayX, overlayY)
+                if self.overlay then
+                    self.overlay:SetOffsets(overlayX, overlayY)
                 else
                     local stackMembers = table.imap(data.lines, function(_, line)
                         local valueText = MasterFramework:Text("")
                         local member = MasterFramework:HorizontalStack(
-                            { MasterFramework:Text(line.title, MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)), valueText },
+                            { MasterFramework:Text(line.title or "", MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)), valueText },
                             MasterFramework:AutoScalingDimension(2),
                             0
                         )
@@ -235,14 +246,14 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
                             while scaledAnchor < line.vertices.x[i] do
                                 i = i + 1
                             end
-                            local _string = scaledAnchor .. ": " .. (line.vertices.y[i - 1] or "???")
+                            local _string = format(scaledAnchor) .. ": " .. (line.vertices.y[i - 1] and format(line.vertices.y[i - 1]) or "???")
 
                             if scaledLimit then
                                 i = 1
                                 while scaledLimit < line.vertices.x[i] do
                                     i = i + 1
                                 end
-                                local limitString = scaledLimit .. ": " .. (line.vertices.y[i - 1] or "???")
+                                local limitString = format(scaledLimit) .. ": " .. (line.vertices.y[i - 1] and format(line.vertices.y[i - 1]) or "???")
 
                                 if scaledLimit < scaledAnchor then
                                     _string = limitString .. ", " .. _string
@@ -256,27 +267,31 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
                         return member
                     end)
-                    overlay = MasterFramework:AbsoluteOffsetFromTopLeft(MasterFramework:PrimaryFrame(MasterFramework:Background(
+                    self.overlay = MasterFramework:AbsoluteOffsetFromTopLeft(MasterFramework:PrimaryFrame(MasterFramework:Background(
                         MasterFramework:MarginAroundRect(
-                            MasterFramework:VerticalStack(stackMembers, MasterFramework:AutoScalingDimension(2), 0)
+                            MasterFramework:VerticalStack(stackMembers, MasterFramework:AutoScalingDimension(2), 0),
+                            MasterFramework:AutoScalingDimension(8),
+                            MasterFramework:AutoScalingDimension(8),
+                            MasterFramework:AutoScalingDimension(8),
+                            MasterFramework:AutoScalingDimension(8)
                         ),
                         { MasterFramework.color.baseBackgroundColor },
                         MasterFramework:AutoScalingDimension(5)
                     )), overlayX, overlayY)
-                    overlay.stackMembers = stackMembers
+                    self.overlay.stackMembers = stackMembers
 
-                    local key = MasterFramework:InsertElement(overlay, "Graph Overlay", MasterFramework.layerRequest.top())
-                    overlay.key = key
+                    local key = MasterFramework:InsertElement(self.overlay, "Graph Overlay", MasterFramework.layerRequest.top())
+                    self.overlay.key = key
                 end
 
-                local xScale = cachedWidth / (data.maxX - data.minX)
-                for _, member in ipairs(overlay.stackMembers) do
+                local xScale = (data.maxX - data.minX) / cachedWidth
+                for _, member in ipairs(self.overlay.stackMembers) do
                     member:Update(xScale * anchor, limit and (limit * xScale))
                 end
             else
-                if overlay then
-                    MasterFramework:RemoveElement(overlay.key)
-                    overlay = nil
+                if self.overlay then
+                    MasterFramework:RemoveElement(self.overlay.key)
+                    self.overlay = nil
                 end
             end
         end
@@ -838,6 +853,9 @@ function widget:Shutdown()
         object:Delete()
     end
 
+    if uiGraph.overlay then
+        MasterFramework:RemoveElement(uiGraph.overlay.key)
+    end
     MasterFramework:RemoveElement(key)
     WG.MasterStats = nil
 end
