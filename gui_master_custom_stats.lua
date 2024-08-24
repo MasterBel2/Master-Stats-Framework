@@ -371,6 +371,8 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
     local topText = MasterFramework:Text("", color, font)
     local zeroText = MasterFramework:Text("0", color, font)
     local bottomText = MasterFramework:Text("", color, font)
+    local bottomRightText = MasterFramework:Text("", color, font)
+    local bottomRightTextWidth
 
     local indent = MasterFramework:AutoScalingDimension(2)
 
@@ -410,14 +412,16 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
         if data.showAsLogarithmic then
             topText:SetString(tostring(math.exp(maxY)))
-            bottomText:SetString(tostring(-math.exp(-minY)))
+            bottomText:SetString(tostring(data.minX) .. ", " .. tostring(-math.exp(-minY)))
         else
             topText:SetString(tostring(maxY))
-            bottomText:SetString(tostring(minY))
+            bottomText:SetString(tostring(data.minX) .. ", " .. tostring(minY))
         end
-
+        bottomRightText:SetString(tostring(data.maxX))
+        
         topText:Layout(availableWidth, font:ScaledSize())
         bottomText:Layout(availableWidth, font:ScaledSize())
+        bottomRightTextWidth = bottomRightText:Layout(availableWidth, font:ScaledSize())
         
         return availableWidth, availableHeight
     end
@@ -429,6 +433,7 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
         topText:Position(x + indent(), y + cachedHeight - font:ScaledSize())
         bottomText:Position(x + indent(), y)
+        bottomRightText:Position(x + cachedWidth - bottomRightTextWidth - indent(), y)
 
         cachedX = x
         cachedY = y
