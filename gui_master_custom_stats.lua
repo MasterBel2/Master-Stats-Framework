@@ -231,7 +231,7 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
                 end
 
                 if self.overlay then
-                    self.overlay:SetOffsets(overlayX, overlayY)
+                    self.overlay:SetOffsets(overlayX, MasterFramework.viewportHeight - overlayY)
                 else
                     local stackMembers = table.imap(data.lines, function(_, line)
                         local valueText = MasterFramework:Text("")
