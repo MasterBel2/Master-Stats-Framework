@@ -23,6 +23,8 @@ end
     - the value for each category should be a table of graphs, where:
       - the key for each graph should be a unique human-readable string that will be used as the graph's title on-screen
       - the value for each graph should be a table with the following fields:
+        - (string) xUnit - specifies the units for the x axis. Custom formatting will be provided for the values "Frames" and "Seconds" - they will be shown with `hrs, mins, secs` formatting.
+        - (string) yUnit - specifies the units for the y axis. Custom formatting will be provided for the values "Frames" and "Seconds" - they will be shown with `hrs, mins, secs` formatting.
         - (boolean) discrete - specifies whether each value is a descrete step. If true, the graph will draw extra vertices to avoid "interpolated" slanted lines between values.
         - (array) lines, where each value is a table with the following properties
           - (table) color - a table containing { r = r, g = g, b = b, a = a }
@@ -36,6 +38,8 @@ end
         return {
             ["Test Category"] = {
                 ["Test Graph"] = {
+                    xUnit = "Frames",
+                    yUnit = "Metal",
                     lines = {
                         {
                             title = "Belmakor", -- optional
@@ -194,17 +198,29 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
     local lastDrawnY
 
-    local function format(number)
-        local thousandsMagnitude = math.floor(math.log(number)/math.log(1000))
-        local tensMagnitude = math.floor(math.log(number)/math.log(10))
-        local magnitudeSuffix = {
-            [1] = "k",
-            [2] = "M",
-            [3] = "B",
-            [4] = "T"
-        }
-        local result = math.floor(number * math.pow(10, 1 - tensMagnitude) + 0.5) / math.pow(10, 1 - (tensMagnitude - math.max(0, thousandsMagnitude) * 3)) .. (magnitudeSuffix[thousandsMagnitude] or "")
-        return result
+    local function format(number, unit)
+        if unit == "Frames" then
+            unit = "Seconds"
+            number = number / 30
+        end
+        if unit == "Seconds" then
+            local seconds = number % 60
+            local minutes = math.floor(number / 60 % 60)
+            local hours   = math.floor(number / 3600 % 24)
+        
+            return ((hours > 0) and (hours .. (hours == 1 and "hr, " or "hrs, ")) or "") .. ((minutes > 0) and (minutes  .. (minutes == 1 and "min, " or "mins, ")) or "") .. ((seconds > 0) and (string.format("%.1f", seconds) .. (seconds == 1 and "sec" or "secs")) or "")
+        else
+            local thousandsMagnitude = math.floor(math.log(number)/math.log(1000))
+            local tensMagnitude = math.floor(math.log(number)/math.log(10))
+            local magnitudeSuffix = {
+                [1] = "k",
+                [2] = "M",
+                [3] = "B",
+                [4] = "T"
+            }
+            local result = math.floor(number * math.pow(10, 1 - tensMagnitude) + 0.5) / math.pow(10, 1 - (tensMagnitude - math.max(0, thousandsMagnitude) * 3)) .. (magnitudeSuffix[thousandsMagnitude] or "")
+            return result
+        end
     end
 
     function graph:Select(anchor, limit)
@@ -238,14 +254,14 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
                             while line.vertices.x[i] and scaledAnchor > line.vertices.x[i] do
                                 i = i + 1
                             end
-                            local _string = format(scaledAnchor) .. ": " .. (line.vertices.y[i - 1] and format(line.vertices.y[i - 1]) or "???")
+                            local _string = format(scaledAnchor, data.xUnit) .. ": " .. (line.vertices.y[i - 1] and format(line.vertices.y[i - 1], data.yUnit) or "???")
 
                             if scaledLimit then
                                 i = 1
                                 while line.vertices.x[i] and scaledLimit > line.vertices.x[i] do
                                     i = i + 1
                                 end
-                                local limitString = format(scaledLimit) .. ": " .. (line.vertices.y[i - 1] and format(line.vertices.y[i - 1]) or "???")
+                                local limitString = format(scaledLimit, data.xUnit) .. ": " .. (line.vertices.y[i - 1] and format(line.vertices.y[i - 1], data.yUnit) or "???")
 
                                 if scaledLimit < scaledAnchor then
                                     _string = limitString .. ", " .. _string
