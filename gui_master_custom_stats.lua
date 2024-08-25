@@ -23,7 +23,7 @@ end
     - the value for each category should be a table of graphs, where:
       - the key for each graph should be a unique human-readable string that will be used as the graph's title on-screen
       - the value for each graph should be a table with the following fields:
-        - (number) minX, maxX, minY, maxX. Values provided in the table should not exceed the bounds specified by these values
+        - (number) minX, maxX. Values provided in the table should not exceed the bounds specified by these values
         - (boolean) discrete - specifies whether each value is a descrete step. If true, the graph will draw extra vertices to avoid "interpolated" slanted lines between values.
         - (array) lines, where each value is a table with the following properties
           - (table) color - a table containing { r = r, g = g, b = b, a = a }
@@ -39,8 +39,6 @@ end
                 ["Test Graph"] = {
                     minX = 0,
                     maxX = 1,
-                    minY = 0,
-                    maxY = 1,
                     lines = {
                         {
                             title = "Belmakor", -- optional
@@ -71,9 +69,7 @@ end
 ------------------------------------------------------------------------------------------------------------
 
 local graphData = {
-    minY = 0,
     minX = 0,
-    maxY = 1,
     maxX = 1,
     lines = {
         {
