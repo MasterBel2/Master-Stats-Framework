@@ -611,6 +611,7 @@ function widget:Update()
             return {
                 name = key,
                 list = UISectionedButtonList(key, graphNames, function(_, graphName)
+                    graphTitle:SetString(graphName .. ":")
                     uiGraph:SetData(graphData[graphName])
                     logarithmicCheckBox:SetChecked(graphData[graphName].showAsLogarithmic)
                     deltaCheckBox:SetChecked(graphData[graphName].showAsDelta)
@@ -749,6 +750,7 @@ function widget:Initialize()
 
     logarithmicCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsLogarithmic(checked) end)
     deltaCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsDelta(checked) end)
+    graphTitle = MasterFramework:Text("Demo Graph: ")
 
     local split = MasterFramework:HorizontalStack(
         { 
@@ -763,6 +765,7 @@ function widget:Initialize()
             ),
             MasterFramework:VerticalHungryStack(
                 MasterFramework:HorizontalStack({
+                        graphTitle,
                         logarithmicCheckBox, MasterFramework:Text("Logarithmic"),
                         deltaCheckBox, MasterFramework:Text("Delta")
                     },
