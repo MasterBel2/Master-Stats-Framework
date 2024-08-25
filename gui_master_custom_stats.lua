@@ -424,13 +424,13 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
         end
 
         if data.showAsLogarithmic then
-            topText:SetString(tostring(math.exp(maxY)))
-            bottomText:SetString(tostring(minX) .. ", " .. tostring(-math.exp(-minY)))
+            topText:SetString(format(math.exp(maxY), data.yUnit))
+            bottomText:SetString(format(minX, data.xUnit) .. ", " .. format(-math.exp(-minY), data.yUnit))
         else
-            topText:SetString(tostring(maxY))
-            bottomText:SetString(tostring(minX) .. ", " .. tostring(minY))
+            topText:SetString(format(maxY, data.yUnit))
+            bottomText:SetString(format(minX, data.xUnit) .. ", " .. format(minY, data.yUnit))
         end
-        bottomRightText:SetString(tostring(maxX))
+        bottomRightText:SetString(format(maxX, data.xUnit))
         
         topText:Layout(availableWidth, font:ScaledSize())
         bottomText:Layout(availableWidth, font:ScaledSize())
