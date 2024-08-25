@@ -23,7 +23,6 @@ end
     - the value for each category should be a table of graphs, where:
       - the key for each graph should be a unique human-readable string that will be used as the graph's title on-screen
       - the value for each graph should be a table with the following fields:
-        - (number) minX, maxX. Values provided in the table should not exceed the bounds specified by these values
         - (boolean) discrete - specifies whether each value is a descrete step. If true, the graph will draw extra vertices to avoid "interpolated" slanted lines between values.
         - (array) lines, where each value is a table with the following properties
           - (table) color - a table containing { r = r, g = g, b = b, a = a }
@@ -37,8 +36,6 @@ end
         return {
             ["Test Category"] = {
                 ["Test Graph"] = {
-                    minX = 0,
-                    maxX = 1,
                     lines = {
                         {
                             title = "Belmakor", -- optional
@@ -69,8 +66,6 @@ end
 ------------------------------------------------------------------------------------------------------------
 
 local graphData = {
-    minX = 0,
-    maxX = 1,
     lines = {
         {
             color = { r = 1, g = 0, b = 0, a = 1 },
@@ -187,8 +182,9 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
     local vertexCounts = {}
     local vertexXCoordinates = {}
     local vertexYCoordinates = {}
-    local minY
-    local maxY
+    
+    local minX, maxX, minY, maxY
+
     local magnitude
     local cachedX, cachedX
     local cachedWidth, cachedHeight
@@ -280,7 +276,7 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
                     self.overlay.key = key
                 end
 
-                local xScale = (data.maxX - data.minX) / cachedWidth
+                local xScale = (maxX - minX) / cachedWidth
                 for _, member in ipairs(self.overlay.stackMembers) do
                     member:Update(xScale * anchor, limit and (limit * xScale))
                 end
@@ -353,7 +349,7 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
         vertex(lastX, lastY, line)
         if data.discrete and not data.showAsDelta then
-            vertex(data.maxX, lastY, line)
+            vertex(maxX, lastY, line)
         end
     end
 
@@ -377,8 +373,13 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
         self:NeedsLayout()
         minY = math.huge
         maxY = -math.huge
+        minX = math.huge
+        maxX = -math.huge
 
         for _, line in ipairs(data.lines) do
+            minX = math.min(minX, line.vertices.x[1])
+            maxX = math.max(maxX, line.vertices.x[#line.vertices.x])
+
             if not line.hidden then
                 vertexCounts[line] = 0
                 if not vertexXCoordinates[line] then
@@ -408,12 +409,12 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
         if data.showAsLogarithmic then
             topText:SetString(tostring(math.exp(maxY)))
-            bottomText:SetString(tostring(data.minX) .. ", " .. tostring(-math.exp(-minY)))
+            bottomText:SetString(tostring(minX) .. ", " .. tostring(-math.exp(-minY)))
         else
             topText:SetString(tostring(maxY))
-            bottomText:SetString(tostring(data.minX) .. ", " .. tostring(minY))
+            bottomText:SetString(tostring(minX) .. ", " .. tostring(minY))
         end
-        bottomRightText:SetString(tostring(data.maxX))
+        bottomRightText:SetString(tostring(maxX))
         
         topText:Layout(availableWidth, font:ScaledSize())
         bottomText:Layout(availableWidth, font:ScaledSize())
@@ -491,7 +492,7 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
         
         gl_PushMatrix()
 
-        gl_Scale(cachedWidth / (data.maxX - data.minX), cachedHeight / (maxY - minY), 1)
+        gl_Scale(cachedWidth / (maxX - minX), cachedHeight / (maxY - minY), 1)
         gl_Translate(0, -minY, 0)
 
         for _, line in ipairs(data.lines) do
