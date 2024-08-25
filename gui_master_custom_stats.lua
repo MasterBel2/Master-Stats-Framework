@@ -250,7 +250,7 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
                             if scaledLimit then
                                 i = 1
-                                while scaledLimit > line.vertices.x[i] do
+                                while line.vertices.x[i] and scaledLimit > line.vertices.x[i] do
                                     i = i + 1
                                 end
                                 local limitString = format(scaledLimit) .. ": " .. (line.vertices.y[i - 1] and format(line.vertices.y[i - 1]) or "???")
