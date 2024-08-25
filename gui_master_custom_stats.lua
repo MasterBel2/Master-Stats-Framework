@@ -243,7 +243,7 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
                         function member:Update(scaledAnchor, scaledLimit)
                             local i = 1
-                            while scaledAnchor > line.vertices.x[i] do
+                            while line.vertices.x[i] and scaledAnchor > line.vertices.x[i] do
                                 i = i + 1
                             end
                             local _string = format(scaledAnchor) .. ": " .. (line.vertices.y[i - 1] and format(line.vertices.y[i - 1]) or "???")
