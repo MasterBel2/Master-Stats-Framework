@@ -166,16 +166,37 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
         
             return ((hours > 0) and (hours .. (hours == 1 and "hr, " or "hrs, ")) or "") .. ((minutes > 0) and (minutes  .. (minutes == 1 and "min, " or "mins, ")) or "") .. ((seconds > 0) and (string.format("%.1f", seconds) .. (seconds == 1 and "sec" or "secs")) or "")
         else
-            local thousandsMagnitude = math.floor(math.log(number)/math.log(1000))
-            local tensMagnitude = math.floor(math.log(number)/math.log(10))
+            local thousandsMagnitude = math.floor(math.log(math.abs(number))/math.log(1000))
+            local tensMagnitude = math.floor(math.log(math.abs(number))/math.log(10))
             local magnitudeSuffix = {
+                [-6] = "a",
+                [-5] = "f",
+                [-4] = "p",
+                [-3] = "n",
+                [-2] = "µ",
+                [-1] = "m",
+                [0] = "",
                 [1] = "k",
                 [2] = "M",
                 [3] = "B",
-                [4] = "T"
+                [4] = "T",
+                [5] = "P",
+                [6] = "E",
             }
-            local result = math.floor(number * math.pow(10, 1 - tensMagnitude) + 0.5) / math.pow(10, 1 - (tensMagnitude - math.max(0, thousandsMagnitude) * 3)) .. (magnitudeSuffix[thousandsMagnitude] or "")
-            return result
+            local formatString = {
+                [0] = "%.2f",
+                [1] = "%.1f",
+                [2] = "%.0f"
+            }
+            if number == 0 then
+                return "0.00"
+            end
+            if thousandsMagnitude < 0 then
+                number = number * math.pow(10, 0 - thousandsMagnitude * 3)
+            elseif thousandsMagnitude > 0 then
+                number = number / math.pow(10, thousandsMagnitude * 3)
+            end
+            return string.format(formatString[tensMagnitude % 3], number) .. (magnitudeSuffix[thousandsMagnitude] or "")
         end
     end
 
