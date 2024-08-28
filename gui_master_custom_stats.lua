@@ -120,50 +120,9 @@ local GL_LINES = GL.LINES
 -- Interface Structure
 ------------------------------------------------------------------------------------------------------------
 
-local objectsToDelete = {}
-
-local stepInterval
-
-local function stringOfNumberRoundedToPow10(value, pow10)
-    if pow10 <= 0 then
-        return string_format("%." .. -pow10 .. "f", value)
-    elseif pow10 > 0 then
-        return string_format("%0" .. pow10 .. "d", value)
-    end
-end
-
-local function ContinuousGraphKeys(min, max, stepCount, roundPow10, isLogarithmic)
-    local steps = {}
-        
-    for i = 1, stepCount - 1 do
-        local value
-        if isLogarithmic then
-            value = math.exp(math.log(max) / stepCount * (i - 1))
-        else
-            value = min + (i - 1) * (max - min) / stepCount
-        end
-        steps[i] = stringOfNumberRoundedToPow10(value, roundPow10)
-    end
-
-    steps[stepCount] = stringOfNumberRoundedToPow10(max, roundPow10)
-
-    return steps
-end
-
 local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
     local graph = MasterFramework:Component(true, true)
-
-    -- local uiGraphData = UIGraphData(data, xKeyStepCount, yKeyStepCount)
-
-    local uiXKeys = {}
-    local maxXKeyHeight
-    local uiYKeys = {}
-    local maxYKeyWidth
-
-    local graphBaseline, graphSideline
-
-    local graphWidth, graphHeight
 
     function graph:SetData(newData)
         data = newData
@@ -189,12 +148,9 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
     
     local minX, maxX, minY, maxY
 
-    local magnitude
     local cachedX, cachedX
     local cachedWidth, cachedHeight
     local verticalRatio
-
-    local mouseY = 1000
 
     local lastDrawnY
 
@@ -308,13 +264,6 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
         return selectionAnchor, selectionLimit
     end
 
-    -- local function gl_Vertex_Delta(x, y, vertexFunc)
-    --     vertexFunc(x, y - lastY)
-    -- end
-    -- local function gl_Vertex_Logarithmic(x, y)
-    --     gl_Vertex(x, math_max(0, math_log(y)))
-    -- end
-
     local function vertex(x, y, line)
         if data.showAsDelta then
             local _lastDrawnY = y
@@ -371,8 +320,6 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
     -- Layout, Position & Draw
 
-    local keyPadding = MasterFramework:AutoScalingDimension(10)
-
     local font = MasterFramework.defaultFont
     local color = MasterFramework:Color(0.3, 0.3, 0.3, 1)
 
@@ -413,8 +360,6 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
         end
 
         verticalRatio = (maxY - minY) / availableHeight
-
-        magnitude = (maxY - minY) / 5
 
         cachedWidth = availableWidth
         cachedHeight = availableHeight
@@ -512,16 +457,8 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
         gl_Translate(0, -minY, 0)
 
         for _, line in ipairs(data.lines) do
-            -- local color = line.color
-            -- gl_Color(color.r, color.g, color.b, color.a)
-            -- gl_Shape(GL_LINE_STRIP, table.imap(line.vertices, X))
-            -- Thought that would be faster, but it seems to be something like 10% slower. Yay. But testing it on like 9 data points so who knows.
             if not line.hidden then
-                if gl4 then
-                    -- DrawGraphDataGL4(line, cachedWidth)
-                else
-                    gl_BeginEnd(GL_LINE_STRIP, DrawGraphData, line, cachedWidth)
-                end
+                gl_BeginEnd(GL_LINE_STRIP, DrawGraphData, line, cachedWidth)
             end
         end
         gl_PopMatrix()
@@ -662,10 +599,6 @@ function WG.MasterStats:Refresh()
     refreshRequested = true
 end
 
--- function widget:DebugInfo()
---     return graphLinesMenu
--- end
-
 local function HorizontalWrap(items, horizontalSpacing, verticalSpacing, xAnchor, yAnchor)
     local wrap = { items = items }
     local rows
@@ -745,8 +678,6 @@ function widget:Initialize()
     
     table = MasterFramework.table
     reduce = table.reduce
-
-    stepInterval = MasterFramework:AutoScalingDimension(50)
 
     uiGraph = UIGraph(
         graphData,
@@ -870,11 +801,7 @@ function widget:Initialize()
     )
 end
 
-function widget:Shutdown() 
-    for _, object in ipairs(objectsToDelete) do
-        object:Delete()
-    end
-
+function widget:Shutdown()
     if uiGraph.overlay then
         MasterFramework:RemoveElement(uiGraph.overlay.key)
     end
