@@ -696,27 +696,36 @@ function widget:Update()
             end
         end
 
-        for _, category in pairs(categories) do
-            for _, section in pairs(category.sections) do
-                for _, graph in pairs(section) do
+        for categoryKey, category in pairs(categories) do
+            for sectionKey, section in pairs(category.sections) do
+                for graphName, graph in pairs(section) do
                     if graph.dependencyPaths then
-                        graph.dependencies = table.imap(graph.dependencyPaths, function(_, path)
-                            local categoryName, widgetName, graphName = path:match("([^/]+)/([^/]+)/([^/]+)")
-                            local category = categories[categoryName]
-                            if not category then
-                                error("category not found")
+                        if not pcall(function()
+                            graph.dependencies = table.imap(graph.dependencyPaths, function(_, path)
+                                local categoryName, widgetName, graphName = path:match("([^/]+)/([^/]+)/([^/]+)")
+                                local category = categories[categoryName]
+                                if category then
+                                    local section = category.sections[widgetName]
+                                    if section and section[graphName] then
+                                        return section[graphName]
+                                    else
+                                        error()
+                                    end
+                                else
+                                    error()
+                                end
+                            end)
+                        end) then
+                            section[graphName] = nil
+                            if next(section) == nil then
+                                Spring.Echo("Section empty!")
+                                category.sections[sectionKey] = nil
+                                if next(category.sections) == nil then
+                                    Spring.Echo("Category empty!")
+                                    categories[categoryKey] = nil
+                                end
                             end
-                            local section = category.sections[widgetName]
-                            if not section then
-                                MasterFramework.debugDescription(category.sections, categoryName)
-                                error("section not found")
-                            end
-                            if not section[graphName] then
-                                error("graph not found")
-                            end
-
-                            return section[graphName]
-                        end)
+                        end
                     end
                 end
             end
