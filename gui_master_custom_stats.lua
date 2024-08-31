@@ -907,44 +907,38 @@ function widget:Initialize()
                     0.5
                 ),
                 MasterFramework:Background(
-                    MasterFramework:MarginAroundRect(
-                        MasterFramework:MouseOverResponder(
-                            MasterFramework:MousePressResponder(
-                                MasterFramework:DrawingGroup(uiGraph, true),
-                                function(responder, x, y, button)
+                    MasterFramework:MouseOverResponder(
+                        MasterFramework:MousePressResponder(
+                            MasterFramework:DrawingGroup(uiGraph, true),
+                            function(responder, x, y, button)
+                                local baseX, _ = responder:CachedPosition()
+                                -- uiGraph:Select(x - baseX)
+                                return true
+                            end,
+                            function(responder, x, y, dx, dy, button)
+                                local responderX, _, responderWidth, _ = responder:Geometry()
+                                if button == 1 then
                                     local baseX, _ = responder:CachedPosition()
-                                    -- uiGraph:Select(x - baseX)
-                                    return true
-                                end,
-                                function(responder, x, y, dx, dy, button)
-                                    local responderX, _, responderWidth, _ = responder:Geometry()
-                                    if button == 1 then
-                                        local baseX, _ = responder:CachedPosition()
-                                        local selectionAnchor, _ = uiGraph:GetSelection()
-                                        -- uiGraph:Select(selectionAnchor, math.max(math.min(x - baseX, responderWidth), 0))
-                                    end
-                                end,
-                                function(responder, x, y, button) end
-                            ),
-                            function(responder, x, y)
-                                local _, selectionLimit = uiGraph:GetSelection()
-                                if not selectionLimit then
-                                    local baseX, _ = responder:CachedPosition()
-                                    -- uiGraph:Select(x - baseX)
+                                    local selectionAnchor, _ = uiGraph:GetSelection()
+                                    -- uiGraph:Select(selectionAnchor, math.max(math.min(x - baseX, responderWidth), 0))
                                 end
                             end,
-                            function() end,
-                            function()
-                                local _, selectionLimit = uiGraph:GetSelection()
-                                if not selectionLimit then
-                                    -- uiGraph:Select()
-                                end
-                            end
+                            function(responder, x, y, button) end
                         ),
-                        MasterFramework:AutoScalingDimension(0),
-                        MasterFramework:AutoScalingDimension(0),
-                        MasterFramework:AutoScalingDimension(0),
-                        MasterFramework:AutoScalingDimension(0)
+                        function(responder, x, y)
+                            local _, selectionLimit = uiGraph:GetSelection()
+                            if not selectionLimit then
+                                local baseX, _ = responder:CachedPosition()
+                                -- uiGraph:Select(x - baseX)
+                            end
+                        end,
+                        function() end,
+                        function()
+                            local _, selectionLimit = uiGraph:GetSelection()
+                            if not selectionLimit then
+                                -- uiGraph:Select()
+                            end
+                        end
                     ),
                     { MasterFramework.color.baseBackgroundColor },
                     MasterFramework:AutoScalingDimension(0)
