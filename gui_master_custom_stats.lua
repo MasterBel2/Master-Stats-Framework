@@ -15,29 +15,49 @@ end
 -- https://discord.com/channels/549281623154229250/1132864533258575872
 -- https://discord.com/channels/549281623154229250/1069705949348114572
 
---[[
+--[=[
     To Display Your Graph Here: Implement `function widget:MasterStatsCategories()`
 
     This function should return a table of categories, where: 
     - the key for each category should be a human-readable string, that will be case-sensitively merged with categories from other widgets.
     - the value for each category should be a table of graphs, where:
       - the key for each graph should be a unique human-readable string that will be used as the graph's title on-screen
-      - the value for each graph should be a table with the following fields:
-        - (string) xUnit - specifies the units for the x axis. Custom formatting will be provided for the values "Frames" and "Seconds" - they will be shown with `hrs, mins, secs` formatting.
-        - (string) yUnit - specifies the units for the y axis. Custom formatting will be provided for the values "Frames" and "Seconds" - they will be shown with `hrs, mins, secs` formatting.
-        - (boolean) discrete - specifies whether each value is a descrete step. If true, the graph will draw extra vertices to avoid "interpolated" slanted lines between values.
-        - (array) lines, where each value is a table with the following properties
-          - (table) color - a table containing { r = r, g = g, b = b, a = a }
-          - (table) vertices where:
-            - (array) x, y - the array of x/y values, respectively. vertices.x[n] corresponds to vertices.y[n]. The data is structured like this to achieve SIGNIFICANT speedups.
+      - the value for each graph should follow one of the following formats:
+
+    Raw Table:
+    - (string) xUnit: Specifies the units for the x axis. Custom formatting will be provided for the values "Frames" and "Seconds" - they will be shown with `hrs, mins, secs` formatting.
+    - (string) yUnit: Specifies the units for the y axis. Custom formatting will be provided for the values "Frames" and "Seconds" - they will be shown with `hrs, mins, secs` formatting.
+    - (boolean) discrete Specifies whether each value is a descrete step. If true, the graph will draw extra vertices to avoid "interpolated" slanted lines between values.
+    - (array) lines, where each value is a table with the following properties:
+        - (table) color: A table containing { r = r, g = g, b = b, a = a }
+        - (string) title: A human-readable string indicating what the line describes.
+        - (table) vertices:
+            - (array) x, y: the array of x/y values, respectively. vertices.x[n] corresponds to vertices.y[n]. The data is structured like this to achieve SIGNIFICANT speedups.
+
+    Dependent Table:
+    - (array)  dependencyPaths: Each value is a string containing the category, widget name, and name of the graph to be depended upon.
+                                Each dependency must have the xUnit and the same line count, color, and titles.
+    - (string) yUnit: specifies the units for the y axis. Custom formatting will be provided for the values "Frames" and "Seconds" - they will be shown with `hrs, mins, secs` formatting.
+
+    The following fields will be auto-generated for a dependent table, based on the dependencies:
+    - (string)   xUnit: specifies the units for the y axis. Custom formatting will be provided for the values "Frames" and "Seconds" - they will be shown with `hrs, mins, secs` formatting.
+    - (array)    lines: Describes each of the lines to be drawn, where each value is a table with the following properties:
+        - (table) color: A table containing { r = r, g = g, b = b, a = a }
+        - (string) title: A human-readable string indicating what the line describes.
+    - (function) generator:
+        parameters:
+            - x: The value represented by the horizontal location the pixel will be drawn.
+            - dependencyYValues: An array containing the y value corresponding to the provided x value for each of the dependencies.
+    
+    These auto-generated fields should be considered read-only.
 
     E.g. 
 
     ```lua
     function widget:MasterStatsCategories()
         return {
-            ["Test Category"] = {
-                ["Test Graph"] = {
+            ["Demo Category"] = {
+                ["Demo Raw Graph"] = {
                     xUnit = "Frames",
                     yUnit = "Metal",
                     lines = {
@@ -59,11 +79,31 @@ end
                         }
                     }
                 }
+                ["Demo Dependent Graph"] = {
+                    dependencies = { "Demo Category/Stats (MasterBel2 Edition)/Demo Raw Graph" },
+                    xUnit = "Frames", --[[Auto-generated! DO NOT PROVIDE A VALUE FOR THIS]]
+                    yUnit = "Metal",
+                    lines = --[[Auto-generated! DO NOT PROVIDE A VALUE FOR THIS]] {
+                        {
+                            title = "Belmakor", -- optional
+                            hidden = true, -- optional; when absent, the line is assumed to be showing. (i.e. lines are only hidden if explicitely set to be hidden)
+                            color = { r = 1, g = 0, b = 0, a = 1 }
+                        },
+                        {
+                            title = "BelSon", -- optional
+                            color = { r = 0, g = 0, b = 1, a = 1 }
+                        },
+                        {
+                            title = "MasterBel2", -- optional
+                            color = { r = 0, g = 1, b = 0, a = 1 }
+                        }
+                    }
+                }
             }
         }
     end
     ```
-]]
+]=]
 
 ------------------------------------------------------------------------------------------------------------
 -- Dummy Data (For testing purposes)
@@ -285,7 +325,7 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
         return selectionAnchor, selectionLimit
     end
 
-    local function vertex(x, y, line)
+    local function vertex(x, y, line, minY, maxY)
         if data.showAsDelta then
             local _lastDrawnY = y
             y = y - lastDrawnY
@@ -305,38 +345,7 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
         vertexCounts[line] = vertexCounts[line] + 1
 
-        minY = math_min(y, minY)
-        maxY = math_max(y, maxY)
-    end
-
-    local function GenerateLineData(line, pixelWidth)
-        local vertexCount = #line.vertices.x
-        local vertices = line.vertices
-        local lastDrawnX = -1
-        local firstX = vertices.x[1]
-        local firstY = vertices.y[1]
-        local lastX = vertices.x[vertexCount]
-        local lastY = vertices.y[vertexCount]
-
-        lastDrawnY = firstY
-        vertex(firstX, firstY, line)
-
-        local xPerPixelWidth = (lastX - firstX) / pixelWidth
-        
-        for i = 2, vertexCount do
-            if vertices.x[i] > lastDrawnX + xPerPixelWidth then
-                if data.discrete and not data.showAsDelta then
-                    vertex(vertices.x[i], vertices.y[i - 1], line)
-                end
-                vertex(vertices.x[i], vertices.y[i], line)
-                lastDrawnX = i
-            end
-        end
-
-        vertex(lastX, lastY, line)
-        if data.discrete and not data.showAsDelta then
-            vertex(maxX, lastY, line)
-        end
+        return math_min(y, minY), math_max(y, maxY)
     end
 
     -- Layout, Position & Draw
@@ -351,34 +360,156 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
     local bottomRightTextWidth
 
     local indent = MasterFramework:AutoScalingDimension(2)
+    
+    local function returnZero() return 0 end
+    local function returnOne() return 1 end
 
-    function graph:Layout(availableWidth, availableHeight)
-        self:RegisterDrawingGroup()
-        self:NeedsLayout()
-        minY = math.huge
-        maxY = -math.huge
-        minX = math.huge
-        maxX = -math.huge
+    local function graphMetadata(data, pixelWidth)
+        local minY = math.huge
+        local maxY = -math.huge
 
-        for _, line in ipairs(data.lines) do
-            minX = math.min(minX, line.vertices.x[1])
-            maxX = math.max(maxX, line.vertices.x[#line.vertices.x])
+        if data.dependencies then
+            -- if not data.xUnit then error("graphMetadata: no xUnit on non-dependent graph!") end
+            local firstLineCount, firstXUnit, minX, maxX = graphMetadata(data.dependencies[1], pixelWidth)
+            for i = 2, #data.dependencies do
+                local lineCount, xUnit, _minX, _maxX = graphMetadata(data.dependencies[i], pixelWidth)
+                if lineCount ~= firstLineCount then
+                    error("graphMetadata: Dependency has mismatched line count!")
+                end
+                if firstXUnit ~= xUnit then
+                    error("graphMetadata: Dependency has mismatched x unit!")
+                end
+                minX = math.max(minX, _minX)
+                maxX = math.min(maxX, _maxX)
+            end
 
-            if not line.hidden then
+            if not data.lines then
+                data.lines = {}
+            end
+
+            for lineIndex = 1, firstLineCount do
+                local line
+                if data.lines[lineIndex] ~= nil then
+                    line = data.lines[lineIndex]
+                else
+                    line = { 
+                        color = data.dependencies[1].lines[lineIndex].color,
+                        title = data.dependencies[1].lines[lineIndex].title
+                    }
+                    data.lines[lineIndex] = line
+                    vertexXCoordinates[line] = {}
+                    vertexYCoordinates[line] = {}
+                end
+
+                local dependencyYValues = table.repeating(firstLineCount, returnZero)
+                local dependencyNextXIndex = table.repeating(firstLineCount, returnOne)
+
+                local xCoordinates = vertexXCoordinates[line]
+                local yCoordinates = vertexYCoordinates[line]
+                
+                local vertexCount = 0
+                local dependencyCount = #data.dependencies
+                for graphX = 0, pixelWidth do
+                    local x = graphX / pixelWidth * (maxX - minX)
+                    for i = 1, dependencyCount do
+                        local dependencyLine = data.dependencies[i].lines[lineIndex]
+                        local dependencyXCoordinates = vertexXCoordinates[dependencyLine]
+                        local dependencyYCoordinates = vertexYCoordinates[dependencyLine]
+
+                        while dependencyXCoordinates[dependencyNextXIndex[i]] and (dependencyXCoordinates[dependencyNextXIndex[i]] < x) do
+                            dependencyNextXIndex[i] = dependencyNextXIndex[i] + 1
+                        end
+                        -- if true then
+                        if data.dependencies[i].discrete or not dependencyXCoordinates[dependencyNextXIndex[i] - 1] or not dependencyXCoordinates[dependencyNextXIndex[i]] then
+                            dependencyYValues[i] = dependencyYCoordinates[dependencyNextXIndex[i]] or dependencyYValues[i]
+                        else
+                            local previousY = dependencyYCoordinates[dependencyNextXIndex[i] - 1] or dependencyYValues[i]
+                            local nextY = dependencyYCoordinates[dependencyNextXIndex[i]] or dependencyYValues[i]
+                            local previousX = dependencyXCoordinates[dependencyNextXIndex[i] - 1]
+                            local nextX = dependencyXCoordinates[dependencyNextXIndex[i]] or x
+                            dependencyYValues[i] = (previousY + ((nextY - previousY) * (x - previousX) / (nextX - previousX) )) or dependencyYValues[i]
+                        end
+                    end
+
+                    local y = data.generator(x, dependencyYValues)
+
+                    vertexCount = vertexCount + 1
+                    xCoordinates[vertexCount] = x
+                    yCoordinates[vertexCount] = y
+                    
+                    minY = math.min(minY, y)
+                    maxY = math.max(maxY, y)
+                end
+                vertexCounts[line] = vertexCount
+
+                for i = vertexCount + 1, #vertexXCoordinates do
+                    xCoordinates[i] = nil
+                    yCoordinates[i] = nil
+                end
+            end
+
+            return firstLineCount, firstXUnit, minX, maxX, minY, maxY
+        else
+            local minX = math.huge
+            local maxX = -math.huge
+            for _, line in ipairs(data.lines) do
+                minX = math.min(minX, line.vertices.x[1])
+                maxX = math.max(maxX, line.vertices.x[#line.vertices.x])
+            end
+            for _, line in ipairs(data.lines) do
                 vertexCounts[line] = 0
                 if not vertexXCoordinates[line] then
                     vertexXCoordinates[line] = {}
                     vertexYCoordinates[line] = {}
                 end
 
-                GenerateLineData(line, availableWidth)
+                local vertexCount = #line.vertices.x
+                local vertices = line.vertices
+                local lastDrawnX = -1
+                local firstX = vertices.x[1]
+                local firstY = vertices.y[1]
+                local lastX = vertices.x[vertexCount]
+                local lastY = vertices.y[vertexCount]
+
+                lastDrawnY = firstY
+                minY, maxY = vertex(firstX, firstY, line, minY, maxY)
+
+                local xPerPixelWidth = (lastX - firstX) / pixelWidth
+                
+                for i = 2, vertexCount do
+                    if vertices.x[i] > lastDrawnX + xPerPixelWidth then
+                        if data.discrete and not data.showAsDelta then
+                            minY, maxY = vertex(vertices.x[i], vertices.y[i - 1], line, minY, maxY)
+                        end
+                        minY, maxY = vertex(vertices.x[i], vertices.y[i], line, minY, maxY)
+                        lastDrawnX = i
+                    end
+                end
+
+                minY, maxY = vertex(lastX, lastY, line, minY, maxY)
+                if data.discrete and not data.showAsDelta then
+                    minY, maxY = vertex(maxX, lastY, line, minY, maxY)
+                end
 
                 for i = vertexCounts[line] + 1, #vertexXCoordinates[line] do
                     vertexXCoordinates[line][i] = nil
                     vertexYCoordinates[line][i] = nil
                 end
             end
+
+            return #data.lines, data.xUnit, minX, maxX, minY, maxY
         end
+    end
+
+    function graph:Layout(availableWidth, availableHeight)
+        self:RegisterDrawingGroup()
+        self:NeedsLayout()
+        
+        local _, _, _minX, _maxX, _minY, _maxY = graphMetadata(data, availableWidth)
+        minX = _minX
+        maxX = _maxX
+        minY = _minY
+        maxY = _maxY
 
         verticalRatio = (maxY - minY) / availableHeight
 
@@ -546,7 +677,7 @@ function widget:Update()
     if refreshRequested then
         local categories = {}
 
-        for widgetName, widget in pairs(widgetHandler.widgets) do
+        for _, widget in pairs(widgetHandler.widgets) do
             if widget.MasterStatsCategories then
                 -- categories[name] = { graphs = table }
                 local widgetCategories = widget:MasterStatsCategories()
@@ -554,13 +685,39 @@ function widget:Update()
                 for categoryName, widgetCategory in pairs(widgetCategories) do
                     local section = {}
                     for graphName, graph in pairs(widgetCategory) do
-                        section[graphName] = graph 
+                        section[graphName] = graph
                     end
 
                     local existingCategory = categories[categoryName] or { sections = {} }
-                    existingCategory.sections[widgetName] = section
+                    existingCategory.sections[widget.whInfo.name] = section
 
                     categories[categoryName] = existingCategory
+                end
+            end
+        end
+
+        for _, category in pairs(categories) do
+            for _, section in pairs(category.sections) do
+                for _, graph in pairs(section) do
+                    if graph.dependencyPaths then
+                        graph.dependencies = table.imap(graph.dependencyPaths, function(_, path)
+                            local categoryName, widgetName, graphName = path:match("([^/]+)/([^/]+)/([^/]+)")
+                            local category = categories[categoryName]
+                            if not category then
+                                error("category not found")
+                            end
+                            local section = category.sections[widgetName]
+                            if not section then
+                                MasterFramework.debugDescription(category.sections, categoryName)
+                                error("section not found")
+                            end
+                            if not section[graphName] then
+                                error("graph not found")
+                            end
+
+                            return section[graphName]
+                        end)
+                    end
                 end
             end
         end
@@ -584,22 +741,24 @@ function widget:Update()
                 list = UISectionedButtonList(key, graphNames, function(_, graphName)
                     graphTitle:SetString(graphName .. ":")
                     uiGraph:SetData(graphData[graphName])
-                    uiGraph:Select()
+                    -- uiGraph:Select()
                     logarithmicCheckBox:SetChecked(graphData[graphName].showAsLogarithmic)
                     deltaCheckBox:SetChecked(graphData[graphName].showAsDelta)
-                    graphLinesMenu.items = table.imap(graphData[graphName].lines, function(_, line)
-                        local color = MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)
-                        local checkbox = MasterFramework:CheckBox(12, function(_, checked) line.hidden = not checked end)
-                        checkbox:SetChecked(not line.hidden)
-                        return MasterFramework:HorizontalStack(
-                            {
-                                checkbox,
-                                line.title and MasterFramework:Text(line.title, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3))
-                            },
-                            MasterFramework:AutoScalingDimension(8),
-                            0.5
-                        )
-                    end)
+                    if graphData[graphName].lines then
+                        graphLinesMenu.items = table.imap(graphData[graphName].lines, function(_, line)
+                            local color = MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)
+                            local checkbox = MasterFramework:CheckBox(12, function(_, checked) line.hidden = not checked end)
+                            checkbox:SetChecked(not line.hidden)
+                            return MasterFramework:HorizontalStack(
+                                {
+                                    checkbox,
+                                    line.title and MasterFramework:Text(line.title, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3))
+                                },
+                                MasterFramework:AutoScalingDimension(8),
+                                0.5
+                            )
+                        end)
+                    end
                 end)
             }
         end)
@@ -745,7 +904,7 @@ function widget:Initialize()
                                 MasterFramework:DrawingGroup(uiGraph, true),
                                 function(responder, x, y, button)
                                     local baseX, _ = responder:CachedPosition()
-                                    uiGraph:Select(x - baseX)
+                                    -- uiGraph:Select(x - baseX)
                                     return true
                                 end,
                                 function(responder, x, y, dx, dy, button)
@@ -753,7 +912,7 @@ function widget:Initialize()
                                     if button == 1 then
                                         local baseX, _ = responder:CachedPosition()
                                         local selectionAnchor, _ = uiGraph:GetSelection()
-                                        uiGraph:Select(selectionAnchor, math.max(math.min(x - baseX, responderWidth), 0))
+                                        -- uiGraph:Select(selectionAnchor, math.max(math.min(x - baseX, responderWidth), 0))
                                     end
                                 end,
                                 function(responder, x, y, button) end
@@ -762,14 +921,14 @@ function widget:Initialize()
                                 local _, selectionLimit = uiGraph:GetSelection()
                                 if not selectionLimit then
                                     local baseX, _ = responder:CachedPosition()
-                                    uiGraph:Select(x - baseX)
+                                    -- uiGraph:Select(x - baseX)
                                 end
                             end,
                             function() end,
                             function()
                                 local _, selectionLimit = uiGraph:GetSelection()
                                 if not selectionLimit then
-                                    uiGraph:Select()
+                                    -- uiGraph:Select()
                                 end
                             end
                         ),
