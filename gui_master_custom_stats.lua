@@ -888,15 +888,7 @@ function widget:Initialize()
 
     local split = MasterFramework:HorizontalStack(
         { 
-            MasterFramework:VerticalScrollContainer(
-                MasterFramework:MarginAroundRect(
-                    menu,
-                    MasterFramework:AutoScalingDimension(0),
-                    MasterFramework:AutoScalingDimension(0),
-                    MasterFramework:AutoScalingDimension(0),
-                    MasterFramework:AutoScalingDimension(0)
-                )
-            ),
+            MasterFramework:VerticalScrollContainer(menu),
             MasterFramework:VerticalHungryStack(
                 MasterFramework:HorizontalStack({
                         graphTitle,
