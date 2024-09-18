@@ -645,7 +645,6 @@ local function UISectionedButtonList(name, options, action)
         local button = MasterFramework:Button(
             MasterFramework:Text(optionName),
             function(self)
-                -- self.margin.background = MasterFramework:Color(0.66, 1, 1, 0.66) -- SelectedColor
                 action(name, optionName)
             end
         )
