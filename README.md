@@ -1,6 +1,6 @@
 Master-Stats-Framework is a real-time statistics widget for the Recoil Engine (with specific focus on Beyond All Reason: compatibility with other games is not guaranteed). It provides an interface by which statistics-collection widgets may make their statistics available to a player/spectator - currently limited to graphs.
 
-Note: Master Stats Framework depends upon [MasterBel2's GUI Framework](https://github/MasterBel2/Master-GUI-Framework).
+Note: Master Stats Framework depends upon [MasterBel2's GUI Framework](https://github/MasterBel2/Master-GUI-Framework) and [Recoil Lua Editor](https://github.com/MasterBel2/Recoil-Lua-Editor).
 
 Widgets wishing to present stats must implement `function widget:MasterStatsCategories()`.
 This function should return a table of categories, where: 

@@ -109,7 +109,7 @@ end
 -- Dummy Data (For testing purposes)
 ------------------------------------------------------------------------------------------------------------
 
-local graphData = {
+local demoGraph = {
     lines = {
         {
             color = { r = 1, g = 0, b = 0, a = 1 },
@@ -156,6 +156,43 @@ local gl_Vertex = gl.Vertex
 local GL_LINE_STRIP = GL.LINE_STRIP
 local GL_LINES = GL.LINES
 
+local function returnZero() return 0 end
+local function returnOne() return 1 end
+local function returnFirstDependency(x, dependencyYValues)
+    return dependencyYValues[1]
+end
+
+------------------------------------------------------------------------------------------------------------
+-- Data
+------------------------------------------------------------------------------------------------------------
+
+local categories
+local graphData
+
+local selectedGraphTitle
+
+local composedGraphsDir = "LuaUI/Custom Stats/Composed Graphs"
+
+local function SaveComposedGraph(graphName, graph)
+    Spring.CreateDir(composedGraphsDir)
+    local file = io.open(composedGraphsDir .. "/" .. graphName .. ".json", "w")
+    file:write(Json.encode({
+        graphName = graphName,
+        generator = graph._rawGenerator,
+        yUnit = graph.yUnit,
+        dependencyPaths = graph.dependencyPaths
+    }))
+    file:close()
+end
+
+local customComposedGraphs = {}
+
+function widget:MasterStatsCategories()
+    return {
+        ["Custom Composed Graphs"] = customComposedGraphs
+    }
+end
+
 ------------------------------------------------------------------------------------------------------------
 -- Interface Structure
 ------------------------------------------------------------------------------------------------------------
@@ -166,6 +203,10 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
 
     function graph:SetData(newData)
         data = newData
+    end
+
+    function graph:GetData()
+        return data
     end
 
     function graph:SetShowAsLogarithmic(newValue)
@@ -360,15 +401,15 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
     local bottomRightTextWidth
 
     local indent = MasterFramework:AutoScalingDimension(2)
-    
-    local function returnZero() return 0 end
-    local function returnOne() return 1 end
 
     local function graphMetadata(data, pixelWidth)
         local minY = math.huge
         local maxY = -math.huge
 
         if data.dependencies then
+            if #data.dependencies == 0 or not data.generator then
+                return 0, "", 0, 0, 0, 0
+            end
             -- if not data.xUnit then error("graphMetadata: no xUnit on non-dependent graph!") end
             local firstLineCount, firstXUnit, minX, maxX = graphMetadata(data.dependencies[1], pixelWidth)
             for i = 2, #data.dependencies do
@@ -381,10 +422,6 @@ local function UIGraph(data, xKeyStepCount, yKeyStepCount)
                 end
                 minX = math.max(minX, _minX)
                 maxX = math.min(maxX, _maxX)
-            end
-
-            if not data.lines then
-                data.lines = {}
             end
 
             for lineIndex = 1, firstLineCount do
@@ -634,6 +671,11 @@ local deltaCheckBox
 local graphLinesMenu
 local uiCategories = {}
 
+local compositionLogicField
+local graphDependenciesField
+local wrappedGraphLinesMenu
+local graphFooterStack
+
 local refreshRequested = true
 
 local function UISectionedButtonList(name, options, action)
@@ -667,6 +709,45 @@ local function UISectionedButtonList(name, options, action)
     return buttonList
 end
 
+local function DisplayGraph(graphName)
+    selectedGraphTitle = graphName
+    graphTitle:SetString(graphName .. ":")
+    uiGraph:SetData(graphData[graphName])
+
+    logarithmicCheckBox:SetChecked(graphData[graphName].showAsLogarithmic)
+    deltaCheckBox:SetChecked(graphData[graphName].showAsDelta)
+
+    if graphData[graphName].lines then
+        graphLinesMenu.items = table.imap(graphData[graphName].lines, function(_, line)
+            local color = MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)
+            local checkbox = MasterFramework:CheckBox(12, function(_, checked) line.hidden = not checked end)
+            checkbox:SetChecked(not line.hidden)
+            return MasterFramework:HorizontalStack(
+                {
+                    checkbox,
+                    line.title and MasterFramework:Text(line.title, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3))
+                },
+                MasterFramework:AutoScalingDimension(8),
+                0.5
+            )
+        end)
+    end
+
+    if graphData[graphName]._customComposedGraph then
+        graphDependenciesField.text:SetString(table.concat(table.imap(graphData[graphName].dependencyPaths, function(_, dependencyName) return "\"" .. dependencyName .. "\"" end), ", ") or "")
+        compositionLogicField.text:SetString(graphData[graphName]._rawGenerator)
+        graphFooterStack:SetMembers({
+            graphDependenciesField,
+            compositionLogicField,
+            wrappedGraphLinesMenu
+        })
+    else
+        graphFooterStack:SetMembers({
+            wrappedGraphLinesMenu
+        })
+    end
+end
+
 ------------------------------------------------------------------------------------------------------------
 -- Create / Destroy
 ------------------------------------------------------------------------------------------------------------
@@ -674,7 +755,7 @@ end
 function widget:Update()
 
     if refreshRequested then
-        local categories = {}
+        categories = {}
 
         for _, widget in pairs(widgetHandler.widgets) do
             if widget.MasterStatsCategories then
@@ -699,6 +780,7 @@ function widget:Update()
             for sectionKey, section in pairs(category.sections) do
                 for graphName, graph in pairs(section) do
                     if graph.dependencyPaths then
+                        graph.lines = {}
                         if not pcall(function()
                             graph.dependencies = table.imap(graph.dependencyPaths, function(_, path)
                                 local categoryName, widgetName, graphName = path:match("([^/]+)/([^/]+)/([^/]+)")
@@ -715,25 +797,26 @@ function widget:Update()
                                 end
                             end)
                         end) then
-                            section[graphName] = nil
-                            if next(section) == nil then
-                                Spring.Echo("Section empty!")
-                                category.sections[sectionKey] = nil
-                                if next(category.sections) == nil then
-                                    Spring.Echo("Category empty!")
-                                    categories[categoryKey] = nil
-                                end
-                            end
+                            graph.dependencies = {}
+                            -- section[graphName] = nil
+                            -- if next(section) == nil then
+                            --     Spring.Echo("Section empty!")
+                            --     category.sections[sectionKey] = nil
+                            --     if next(category.sections) == nil then
+                            --         Spring.Echo("Category empty!")
+                            --         categories[categoryKey] = nil
+                            --     end
+                            -- end
                         end
                     end
                 end
             end
         end
 
+        graphData = {}
         local uiCategories = table.mapToArray(categories, function(key, value)
 
             local graphNames = {}
-            local graphData = {}
 
             for _, section in pairs(value.sections) do
                 for graphName, _graphData in pairs(section) do
@@ -747,26 +830,7 @@ function widget:Update()
             return {
                 name = key,
                 list = UISectionedButtonList(key, graphNames, function(_, graphName)
-                    graphTitle:SetString(graphName .. ":")
-                    uiGraph:SetData(graphData[graphName])
-                    -- uiGraph:Select()
-                    logarithmicCheckBox:SetChecked(graphData[graphName].showAsLogarithmic)
-                    deltaCheckBox:SetChecked(graphData[graphName].showAsDelta)
-                    if graphData[graphName].lines then
-                        graphLinesMenu.items = table.imap(graphData[graphName].lines, function(_, line)
-                            local color = MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)
-                            local checkbox = MasterFramework:CheckBox(12, function(_, checked) line.hidden = not checked end)
-                            checkbox:SetChecked(not line.hidden)
-                            return MasterFramework:HorizontalStack(
-                                {
-                                    checkbox,
-                                    line.title and MasterFramework:Text(line.title, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3))
-                                },
-                                MasterFramework:AutoScalingDimension(8),
-                                0.5
-                            )
-                        end)
-                    end
+                    DisplayGraph(graphName)
                 end)
             }
         end)
@@ -863,12 +927,37 @@ function widget:Initialize()
     if not MasterFramework then
         error("[" .. widget:GetInfo().name .. "] MasterFramework " .. requiredFrameworkVersion .. " not found!")
     end
+
+    for _, filename in ipairs(VFS.DirList(composedGraphsDir, nil, VFS.RAW)) do
+        local success, _error = pcall(function()
+            local data = Json.decode(VFS.LoadFile(filename, VFS.RAW))
+            customComposedGraphs[data.graphName] = {
+                _customComposedGraph = true,
+                yUnit = data.yUnit,
+                rawGenerator = data.generator,
+                dependencyPaths = data.dependencyPaths
+            }
+
+            local func = loadstring("return function(x, dependencyYValues)\nreturn " .. data.generator .. "\nend")
+            if func and data.generator ~= "" then
+                if type(func()) == "function" then
+                    customComposedGraphs[data.graphName].generator = func()
+                else
+                    customComposedGraphs[data.graphName].generator = returnFirstDependency
+                end
+            else
+                customComposedGraphs[data.graphName].generator = returnFirstDependency
+            end
+        end)
+        if not success then Spring.Echo(_error) end
+    end
+
     
     table = MasterFramework.table
     reduce = table.reduce
 
     uiGraph = UIGraph(
-        graphData,
+        demoGraph,
         5,
         5
     )
@@ -885,9 +974,88 @@ function widget:Initialize()
     deltaCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsDelta(checked) end)
     graphTitle = MasterFramework:Text("Demo Graph: ")
 
+    compositionLogicField = MasterFramework:LuaTextEntry("", "Enter Composition Logic Here", function()
+        local data = uiGraph:GetData()
+        if data and data._customComposedGraph then
+            local func = loadstring("return function(x, dependencyYValues)\nreturn " .. compositionLogicField.text:GetRawString() .. "\nend")
+            if func then
+                local success, errorOrGenerator = pcall(func)
+                if success and (type(errorOrGenerator) == "function") then
+                    local yValues = table.repeating(#data.lines, returnZero)
+                    local success, result = pcall(errorOrGenerator, 0, yValues)
+                    if success and (type(result) == "number") then
+                        data._rawGenerator = compositionLogicField.text:GetRawString()
+                        data.generator = errorOrGenerator
+                        SaveComposedGraph(selectedGraphTitle, data)
+                    else
+                        Spring.Echo(result)
+                    end
+                else
+                    Spring.Echo(errorOrGenerator)
+                end
+            end
+        end
+    end)
+    graphDependenciesField = MasterFramework:LuaTextEntry("", "Enter Graph Dependencies Here", function()
+        local data = uiGraph:GetData()
+        if data and data._customComposedGraph then
+            local func = loadstring("return { " .. graphDependenciesField.text:GetRawString() .. " }")
+            if func then
+                local success, result = pcall(func)
+                if success and (type(result) == "table") then
+                    for _, value in ipairs(result) do
+                        if type(value) ~= "string" then
+                            return
+                        end
+                        data.dependencyPaths = result
+                        SaveComposedGraph(selectedGraphTitle, data)
+                        WG.MasterStats:Refresh()
+                    end
+                else
+                    Spring.Echo(result)
+                end
+            end
+        end
+    end)
+    wrappedGraphLinesMenu = MasterFramework:MarginAroundRect(
+        graphLinesMenu, 
+        MasterFramework:AutoScalingDimension(20), 
+        MasterFramework:AutoScalingDimension(20), 
+        MasterFramework:AutoScalingDimension(20), 
+        MasterFramework:AutoScalingDimension(20)
+    )
+
+    graphFooterStack = MasterFramework:VerticalStack({}, MasterFramework:AutoScalingDimension(8), 0)
+
     local split = MasterFramework:HorizontalStack(
-        { 
-            MasterFramework:VerticalScrollContainer(menu),
+        {
+            MasterFramework:VerticalHungryStack(
+                MasterFramework:Rect(MasterFramework:AutoScalingDimension(0), MasterFramework:AutoScalingDimension(0)),
+                MasterFramework:VerticalScrollContainer(menu),
+                MasterFramework:Button(
+                    MasterFramework:Text("+"),
+                    function()
+                        local baseGraphTitle = "New Composed Graph"
+                        local graphTitle = baseGraphTitle
+                        local counter = 0
+
+                        while customComposedGraphs[graphTitle] do
+                            counter = counter + 1
+                            graphTitle = baseGraphTitle .. " " .. counter
+                        end
+                        customComposedGraphs[graphTitle] = {
+                            _customComposedGraph = true,
+                            yUnit = "",
+                            _rawGenerator = "",
+                            generator = returnFirstDependency,
+                            dependencyPaths = {}
+                        }
+
+                        WG.MasterStats:Refresh()
+                    end
+                ),
+                0
+            ),
             MasterFramework:VerticalHungryStack(
                 MasterFramework:HorizontalStack({
                         graphTitle,
@@ -934,13 +1102,7 @@ function widget:Initialize()
                     { MasterFramework.color.baseBackgroundColor },
                     MasterFramework:AutoScalingDimension(0)
                 ),
-                MasterFramework:MarginAroundRect(
-                    graphLinesMenu,
-                    MasterFramework:AutoScalingDimension(20),
-                    MasterFramework:AutoScalingDimension(20),
-                    MasterFramework:AutoScalingDimension(20),
-                    MasterFramework:AutoScalingDimension(20)
-                ),
+                graphFooterStack,
                 0.5
             )
         },
