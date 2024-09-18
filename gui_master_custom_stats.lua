@@ -974,7 +974,7 @@ function widget:Initialize()
     deltaCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsDelta(checked) end)
     graphTitle = MasterFramework:Text("Demo Graph: ")
 
-    compositionLogicField = MasterFramework:LuaTextEntry("", "Enter Composition Logic Here", function()
+    compositionLogicField = WG.LuaTextEntry(MasterFramework, "", "Enter Composition Logic Here", function()
         local data = uiGraph:GetData()
         if data and data._customComposedGraph then
             local func = loadstring("return function(x, dependencyYValues)\nreturn " .. compositionLogicField.text:GetRawString() .. "\nend")
@@ -996,7 +996,7 @@ function widget:Initialize()
             end
         end
     end)
-    graphDependenciesField = MasterFramework:LuaTextEntry("", "Enter Graph Dependencies Here", function()
+    graphDependenciesField = WG.LuaTextEntry(MasterFramework, "", "Enter Graph Dependencies Here", function()
         local data = uiGraph:GetData()
         if data and data._customComposedGraph then
             local func = loadstring("return { " .. graphDependenciesField.text:GetRawString() .. " }")
