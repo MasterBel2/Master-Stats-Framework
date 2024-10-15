@@ -1071,7 +1071,7 @@ function widget:Initialize()
                             MasterFramework:DrawingGroup(uiGraph, true),
                             function(responder, x, y, button)
                                 local baseX, _ = responder:CachedPosition()
-                                -- uiGraph:Select(x - baseX)
+                                uiGraph:Select(x - baseX)
                                 return true
                             end,
                             function(responder, x, y, dx, dy, button)
@@ -1079,7 +1079,7 @@ function widget:Initialize()
                                 if button == 1 then
                                     local baseX, _ = responder:CachedPosition()
                                     local selectionAnchor, _ = uiGraph:GetSelection()
-                                    -- uiGraph:Select(selectionAnchor, math.max(math.min(x - baseX, responderWidth), 0))
+                                    uiGraph:Select(selectionAnchor, math.max(math.min(x - baseX, responderWidth), 0))
                                 end
                             end,
                             function(responder, x, y, button) end
@@ -1088,14 +1088,14 @@ function widget:Initialize()
                             local _, selectionLimit = uiGraph:GetSelection()
                             if not selectionLimit then
                                 local baseX, _ = responder:CachedPosition()
-                                -- uiGraph:Select(x - baseX)
+                                uiGraph:Select(x - baseX)
                             end
                         end,
                         function() end,
                         function()
                             local _, selectionLimit = uiGraph:GetSelection()
                             if not selectionLimit then
-                                -- uiGraph:Select()
+                                uiGraph:Select()
                             end
                         end
                     ),
