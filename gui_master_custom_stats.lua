@@ -197,7 +197,7 @@ end
 -- Interface Structure
 ------------------------------------------------------------------------------------------------------------
 
-local function UIGraph(data, xKeyStepCount, yKeyStepCount)
+local function UIGraph(data)
 
     local graph = MasterFramework:Component(true, true)
 
@@ -956,11 +956,7 @@ function widget:Initialize()
     table = MasterFramework.table
     reduce = table.reduce
 
-    uiGraph = UIGraph(
-        demoGraph,
-        5,
-        5
-    )
+    uiGraph = UIGraph(demoGraph)
 
     menu = MasterFramework:VerticalStack(
         {},
