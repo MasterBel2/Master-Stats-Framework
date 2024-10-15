@@ -355,7 +355,8 @@ local function UIGraph(data)
                 end
 
                 if self.overlay then
-                    self.overlay:SetOffsets(overlayX + 1, MasterFramework.viewportHeight - overlayY)
+                     -- + 1 offsets from selection indicator & graph top border
+                    self.overlay:SetOffsets(overlayX + 1, MasterFramework.viewportHeight - overlayY + 1)
                 else
                     local stackMembers = table.imap(data.lines, function(_, line)
                         local valueText = MasterFramework:Text("")
