@@ -495,6 +495,7 @@ local function UIGraph(data)
                     data.lines[lineIndex] = line
                     vertexXCoordinates[line] = {}
                     vertexYCoordinates[line] = {}
+                    line.vertices = { x = vertexXCoordinates[line], y = vertexYCoordinates[line] }
                 end
 
                 local dependencyYValues = table.repeating(firstLineCount, returnZero)
