@@ -193,13 +193,117 @@ function widget:MasterStatsCategories()
     }
 end
 
+local function format(number, unit)
+    if unit == "Frames" then
+        unit = "Seconds"
+        number = number / 30
+    end
+    if unit == "Seconds" then
+        local seconds = number % 60
+        local minutes = math.floor(number / 60 % 60)
+        local hours   = math.floor(number / 3600 % 24)
+    
+        return ((hours > 0) and (hours .. (hours == 1 and "hr, " or "hrs, ")) or "") .. ((minutes > 0) and (minutes  .. (minutes == 1 and "min, " or "mins, ")) or "") .. ((seconds > 0) and (string.format("%.1f", seconds) .. (seconds == 1 and "sec" or "secs")) or "")
+    else
+        local thousandsMagnitude = math.floor(math.log(math.abs(number))/math.log(1000))
+        local tensMagnitude = math.floor(math.log(math.abs(number))/math.log(10))
+        local magnitudeSuffix = {
+            [-6] = "a",
+            [-5] = "f",
+            [-4] = "p",
+            [-3] = "n",
+            [-2] = "µ",
+            [-1] = "m",
+            [0] = "",
+            [1] = "k",
+            [2] = "M",
+            [3] = "B",
+            [4] = "T",
+            [5] = "P",
+            [6] = "E",
+        }
+        local formatString = {
+            [0] = "%.2f",
+            [1] = "%.1f",
+            [2] = "%.0f"
+        }
+        if number == 0 then
+            return "0.00"
+        end
+        if thousandsMagnitude < 0 then
+            number = number * math.pow(10, 0 - thousandsMagnitude * 3)
+        elseif thousandsMagnitude > 0 then
+            number = number / math.pow(10, thousandsMagnitude * 3)
+        end
+        return string.format(formatString[tensMagnitude % 3], number) .. (magnitudeSuffix[thousandsMagnitude] or "")
+    end
+end
+
 ------------------------------------------------------------------------------------------------------------
 -- Interface Structure
 ------------------------------------------------------------------------------------------------------------
 
+local function MatchWidth(target, body)
+    local matchWidth = {}
+
+    function matchWidth:Layout(availableWidth, availableHeight)
+        local width, _ = target:Size()
+        local _, height = body:Layout(width, availableHeight)
+        return width, height
+    end
+
+    function matchWidth:Position(...)
+        body:Position(...)
+    end
+
+    return matchWidth
+end
+
+local function MatchHeight(target, body)
+    local matchHeight = {}
+
+    function matchHeight:Layout(availableWidth, availableHeight)
+        local _, height = target:Size()
+        local width, _ = body:Layout(availableWidth, height)
+        return width, height
+    end
+
+    function matchHeight:Position(...)
+        body:Position(...)
+    end
+
+    return matchHeight
+end
+
 local function UIGraph(data)
 
     local graph = MasterFramework:Component(true, true)
+
+    -- local xOffset = 0
+    -- local yOffset = 0
+    -- local xScale = 1
+    -- local yScale = 1
+
+    -- function graph:GetScales()
+    --     return xScale, yScale
+    -- end
+    -- function graph:SetScales(newXScale, newYScale)
+    --     if xScale ~= newXScale or yScale ~= newYScale then
+    --         xScale = newXScale
+    --         yScale = newYScale
+    --         self:NeedsLayout()
+    --     end
+    -- end
+    -- function graph:GetOffsets()
+    --     return xOffset, yOffset
+    -- end
+    -- function graph:SetOffsets(newXOffset, newYOffset)
+    --     if xOffset ~= newXOffset or yOffset ~= newYOffset then
+    --         xOffset = newXOffset
+    --         yOffset = newYOffset
+    --         self:NeedsLayout()
+    --     end
+    -- end
 
     function graph:SetData(newData)
         data = newData
@@ -234,52 +338,6 @@ local function UIGraph(data)
     local verticalRatio
 
     local lastDrawnY
-
-    local function format(number, unit)
-        if unit == "Frames" then
-            unit = "Seconds"
-            number = number / 30
-        end
-        if unit == "Seconds" then
-            local seconds = number % 60
-            local minutes = math.floor(number / 60 % 60)
-            local hours   = math.floor(number / 3600 % 24)
-        
-            return ((hours > 0) and (hours .. (hours == 1 and "hr, " or "hrs, ")) or "") .. ((minutes > 0) and (minutes  .. (minutes == 1 and "min, " or "mins, ")) or "") .. ((seconds > 0) and (string.format("%.1f", seconds) .. (seconds == 1 and "sec" or "secs")) or "")
-        else
-            local thousandsMagnitude = math.floor(math.log(math.abs(number))/math.log(1000))
-            local tensMagnitude = math.floor(math.log(math.abs(number))/math.log(10))
-            local magnitudeSuffix = {
-                [-6] = "a",
-                [-5] = "f",
-                [-4] = "p",
-                [-3] = "n",
-                [-2] = "µ",
-                [-1] = "m",
-                [0] = "",
-                [1] = "k",
-                [2] = "M",
-                [3] = "B",
-                [4] = "T",
-                [5] = "P",
-                [6] = "E",
-            }
-            local formatString = {
-                [0] = "%.2f",
-                [1] = "%.1f",
-                [2] = "%.0f"
-            }
-            if number == 0 then
-                return "0.00"
-            end
-            if thousandsMagnitude < 0 then
-                number = number * math.pow(10, 0 - thousandsMagnitude * 3)
-            elseif thousandsMagnitude > 0 then
-                number = number / math.pow(10, thousandsMagnitude * 3)
-            end
-            return string.format(formatString[tensMagnitude % 3], number) .. (magnitudeSuffix[thousandsMagnitude] or "")
-        end
-    end
 
     function graph:Select(anchor, limit)
         if selectionAnchor ~= anchor or selectionLimit ~= limit then
