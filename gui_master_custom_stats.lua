@@ -361,7 +361,7 @@ local function UIGraph(data)
                     local stackMembers = table.imap(data.lines, function(_, line)
                         local valueText = MasterFramework:Text("")
                         local member = MasterFramework:HorizontalStack(
-                            { MasterFramework:Text(line.title or "", MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)), valueText },
+                            { MasterFramework:Text(line.title or "<Unknown>", MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)), valueText },
                             MasterFramework:AutoScalingDimension(2),
                             0
                         )
