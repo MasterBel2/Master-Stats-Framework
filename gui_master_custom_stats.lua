@@ -137,6 +137,9 @@ local key
 local math_max = math.max
 local math_min = math.min
 local math_log = math.log
+local math_huge = math.huge
+local math_ceil = math.ceil
+local math_floor = math.floor
 
 local reduce
 
@@ -425,7 +428,7 @@ local function UIGraph(data)
         return selectionAnchor, selectionLimit
     end
 
-    local function vertex(x, y, line, minY, maxY)
+    local function vertex(x, y, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
         if data.showAsDelta then
             local _lastDrawnY = y
             y = y - lastDrawnY
@@ -440,10 +443,11 @@ local function UIGraph(data)
                 y = 0
             end
         end
-        vertexXCoordinates[line][vertexCounts[line] + 1] = x
-        vertexYCoordinates[line][vertexCounts[line] + 1] = y
+        local newVertexCount = vertexCounts[line] + 1
+        lineVertexXCoordinates[newVertexCount] = x
+        lineVertexYCoordinates[newVertexCount] = y
 
-        vertexCounts[line] = vertexCounts[line] + 1
+        vertexCounts[line] = newVertexCount
 
         return math_min(y, minY), math_max(y, maxY)
     end
@@ -547,50 +551,101 @@ local function UIGraph(data)
 
             return firstLineCount, firstXUnit, minX, maxX, minY, maxY
         else
-            local minX = math.huge
-            local maxX = -math.huge
-            for _, line in ipairs(data.lines) do
-                minX = math.min(minX, line.vertices.x[1])
-                maxX = math.max(maxX, line.vertices.x[#line.vertices.x])
+            local minX = math_huge
+            local maxX = -math_huge
+            for i = 1, #data.lines do
+                local line = data.lines[i]
+                minX = math_min(minX, line.vertices.x[1])
+                maxX = math_max(maxX, line.vertices.x[#line.vertices.x])
             end
-            for _, line in ipairs(data.lines) do
+
+            local generatePixel = data.discrete and not data.showAsDelta
+            local xPerPixelWidth = (maxX - minX) / pixelWidth
+
+            for i = 1, #data.lines do
+                local line = data.lines[i]
                 vertexCounts[line] = 0
                 if not vertexXCoordinates[line] then
                     vertexXCoordinates[line] = {}
                     vertexYCoordinates[line] = {}
                 end
 
-                local vertexCount = #line.vertices.x
                 local vertices = line.vertices
-                local lastDrawnX = -1
-                local firstX = vertices.x[1]
-                local firstY = vertices.y[1]
-                local lastX = vertices.x[vertexCount]
-                local lastY = vertices.y[vertexCount]
+                local xVertices = vertices.x
+                local yVertices = vertices.y
+                local vertexCount = #xVertices
+                local firstX = xVertices[1]
+                local firstY = yVertices[1]
+                local lastX = xVertices[vertexCount]
+                local lastY = yVertices[vertexCount]
+
+                local lineVertexXCoordinates = vertexXCoordinates[line]
+                local lineVertexYCoordinates = vertexYCoordinates[line]
 
                 lastDrawnY = firstY
-                minY, maxY = vertex(firstX, firstY, line, minY, maxY)
+                minY, maxY = vertex(firstX, firstY, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
 
-                local xPerPixelWidth = (lastX - firstX) / pixelWidth
-                
-                for i = 2, vertexCount do
-                    if vertices.x[i] > lastDrawnX + xPerPixelWidth then
-                        if data.discrete and not data.showAsDelta then
-                            minY, maxY = vertex(vertices.x[i], vertices.y[i - 1], line, minY, maxY)
+                local nextDrawX = xPerPixelWidth
+                local floor_expectedVerticesPerScreenX = math_ceil(vertexCount / pixelWidth)
+
+                local lowerBound = 1
+                local oneAboveLowerBound = lowerBound + 1
+                local i = floor_expectedVerticesPerScreenX
+                -- Spring.Echo(floor_expectedVerticesPerScreenX, xPerPixelWidth)
+                local upperBound
+                -- local loopCount = 0
+                -- local loopMax = 100
+                -- while i < vertexCount and loopCount < loopMax do
+                while i < vertexCount do
+                    -- Spring.Echo(" - \n" .. i, xVertices[i], nextDrawX)
+                    local x = xVertices[i]
+                    if upperBound == oneAboveLowerBound then
+                        if generatePixel then
+                            minY, maxY = vertex(xVertices[upperBound], yVertices[upperBound - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
                         end
-                        minY, maxY = vertex(vertices.x[i], vertices.y[i], line, minY, maxY)
-                        lastDrawnX = i
+                        minY, maxY = vertex(xVertices[upperBound], yVertices[upperBound], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                        lowerBound = i
+                        oneAboveLowerBound = lowerBound + 1
+                        upperBound = nil
+                        i = i + floor_expectedVerticesPerScreenX
+                        nextDrawX = nextDrawX + xPerPixelWidth
+                    elseif x < nextDrawX then
+                        lowerBound = i
+                        oneAboveLowerBound = lowerBound + 1
+                        if upperBound then
+                            local shift = (upperBound - lowerBound) * 0.5
+                            i = lowerBound + shift - shift % 1
+                        else
+                            i = i + floor_expectedVerticesPerScreenX
+                        end
+                    elseif x > nextDrawX then
+                        upperBound = i
+                        local shift = (upperBound - lowerBound) * 0.5
+                        i = lowerBound + shift - shift % 1
+                    elseif x == nextDrawX then
+                        if generatePixel then
+                            minY, maxY = vertex(x, yVertices[i - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                        end
+                        minY, maxY = vertex(x, yVertices[i], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                        lowerBound = i
+                        oneAboveLowerBound = lowerBound + 1
+                        upperBound = nil
+                        i = i + floor_expectedVerticesPerScreenX
+                        nextDrawX = nextDrawX + xPerPixelWidth
                     end
+                    -- Spring.Echo(i, lowerBound, upperBound or "nil", nextDrawX)
+                    -- loopCount = loopCount + 1
+                end
+                -- if loopCount == loopMax then error("Terminated loop at " .. loopMax .. " iterations!") end
+
+                minY, maxY = vertex(lastX, lastY, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                if generatePixel then
+                    minY, maxY = vertex(maxX, lastY, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
                 end
 
-                minY, maxY = vertex(lastX, lastY, line, minY, maxY)
-                if data.discrete and not data.showAsDelta then
-                    minY, maxY = vertex(maxX, lastY, line, minY, maxY)
-                end
-
-                for i = vertexCounts[line] + 1, #vertexXCoordinates[line] do
-                    vertexXCoordinates[line][i] = nil
-                    vertexYCoordinates[line][i] = nil
+                for i = vertexCounts[line] + 1, #lineVertexXCoordinates do
+                    lineVertexXCoordinates[i] = nil
+                    lineVertexYCoordinates[i] = nil
                 end
             end
 
