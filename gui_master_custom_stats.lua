@@ -140,6 +140,9 @@ local math_log = math.log
 local math_huge = math.huge
 local math_ceil = math.ceil
 local math_floor = math.floor
+local math_pow = math.pow
+
+local oneOverLogOf2 = 1 / math_log(2)
 
 local reduce
 
@@ -560,7 +563,8 @@ local function UIGraph(data)
             end
 
             local generatePixel = data.discrete and not data.showAsDelta
-            local xPerPixelWidth = (maxX - minX) / pixelWidth
+            local xPerPixelWidth = math_max(1, (maxX - minX) / pixelWidth)
+            local pixelWidthInverse = 1 / pixelWidth
 
             for i = 1, #data.lines do
                 local line = data.lines[i]
@@ -586,42 +590,58 @@ local function UIGraph(data)
                 minY, maxY = vertex(firstX, firstY, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
 
                 local nextDrawX = xPerPixelWidth
-                local floor_expectedVerticesPerScreenX = math_ceil(vertexCount / pixelWidth)
+                local floor_expectedVerticesPerScreenX = math_pow(2, math_floor(math_max(0, math_log(vertexCount * pixelWidthInverse) * oneOverLogOf2)))
 
                 local lowerBound = 1
                 local oneAboveLowerBound = lowerBound + 1
-                local i = floor_expectedVerticesPerScreenX
+                local i = 1 + floor_expectedVerticesPerScreenX
+                local shift = floor_expectedVerticesPerScreenX
+                -- Spring.Echo("#1", shift)
+                -- error()
                 -- Spring.Echo(floor_expectedVerticesPerScreenX, xPerPixelWidth)
                 local upperBound
-                -- local loopCount = 0
-                -- local loopMax = 100
-                -- while i < vertexCount and loopCount < loopMax do
-                while i < vertexCount do
+                local loopCount = 0
+                local loopMax = 100
+                while i < vertexCount and loopCount < loopMax do
+                -- while i < vertexCount do
                     -- Spring.Echo(" - \n" .. i, xVertices[i], nextDrawX)
                     local x = xVertices[i]
                     if upperBound == oneAboveLowerBound then
+                        -- Spring.Echo("#3")
                         if generatePixel then
                             minY, maxY = vertex(xVertices[upperBound], yVertices[upperBound - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
                         end
                         minY, maxY = vertex(xVertices[upperBound], yVertices[upperBound], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
-                        lowerBound = i
+                        shift = floor_expectedVerticesPerScreenX
+                        lowerBound = upperBound
                         oneAboveLowerBound = lowerBound + 1
+                        i = upperBound + floor_expectedVerticesPerScreenX
                         upperBound = nil
-                        i = i + floor_expectedVerticesPerScreenX
                         nextDrawX = nextDrawX + xPerPixelWidth
+                    -- else
+                        -- if not x then
+                            -- Spring.Echo("#error", x, xVertices[i], i, vertexCount, #xVertices, lowerBound, upperBound, oneAboveLowerBound, upperBound == oneAboveLowerBound)
+                        --     error()
+                        -- end
                     elseif x < nextDrawX then
                         lowerBound = i
                         oneAboveLowerBound = lowerBound + 1
                         if upperBound then
-                            local shift = (upperBound - lowerBound) * 0.5
-                            i = lowerBound + shift - shift % 1
+                            shift = shift * 0.5
+                            -- if shift < 0.5 then
+                                -- Spring.Echo("#A", shift, lowerBound, upperBound, vertexCount)
+                            -- end
+                            i = lowerBound + shift
                         else
                             i = i + floor_expectedVerticesPerScreenX
                         end
                     elseif x > nextDrawX then
                         upperBound = i
-                        local shift = (upperBound - lowerBound) * 0.5
-                        i = lowerBound + shift - shift % 1
+                        shift = shift * 0.5
+                        -- if shift < 0.5 then
+                            -- Spring.Echo("#B", shift, lowerBound, upperBound, vertexCount)
+                        -- end
+                        i = lowerBound + shift
                     elseif x == nextDrawX then
                         if generatePixel then
                             minY, maxY = vertex(x, yVertices[i - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
@@ -633,7 +653,8 @@ local function UIGraph(data)
                         i = i + floor_expectedVerticesPerScreenX
                         nextDrawX = nextDrawX + xPerPixelWidth
                     end
-                    -- Spring.Echo(i, lowerBound, upperBound or "nil", nextDrawX)
+                    -- end
+                    -- Spring.Echo("#2", i, lowerBound, upperBound or "nil", nextDrawX)
                     -- loopCount = loopCount + 1
                 end
                 -- if loopCount == loopMax then error("Terminated loop at " .. loopMax .. " iterations!") end
@@ -652,6 +673,7 @@ local function UIGraph(data)
             return #data.lines, data.xUnit, minX, maxX, minY, maxY
         end
     end
+    graph.metadata = graphMetadata
 
     function graph:Layout(availableWidth, availableHeight)
         self:RegisterDrawingGroup()
