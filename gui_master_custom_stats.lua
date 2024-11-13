@@ -563,7 +563,7 @@ local function UIGraph(data)
             end
 
             local generatePixel = data.discrete and not data.showAsDelta
-            local xPerPixelWidth = math_max(1, (maxX - minX) / pixelWidth)
+            local xPerPixelWidth = (maxX - minX) / pixelWidth
             local pixelWidthInverse = 1 / pixelWidth
 
             for i = 1, #data.lines do
