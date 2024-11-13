@@ -281,6 +281,77 @@ local function MatchHeight(target, body)
     return matchHeight
 end
 
+local function HorizontalWrap(items, horizontalSpacing, verticalSpacing, xAnchor, yAnchor)
+    local wrap = { items = items }
+    local rows
+
+    local cachedWidth
+    local cachedHeight
+
+    function wrap:Layout(availableWidth, availableHeight)
+        rows = { { cumulativeWidth = 0, maxHeight = 0, verticalOffset = 0 } }
+        local scaledHorizontalSpacing = horizontalSpacing()
+        local scaledVerticalSpacing = verticalSpacing()
+
+        for index, item in ipairs(self.items) do
+            local row = rows[#rows]
+            local itemWidth, itemHeight = item:Layout(availableWidth, availableHeight)
+            local newCumulativeWidth = row.cumulativeWidth + itemWidth
+
+            if #row > 0 then
+                newCumulativeWidth = newCumulativeWidth + scaledHorizontalSpacing
+            end
+
+            if newCumulativeWidth > availableWidth then
+                item._horizontalWrap_xOffset = 0
+                rows[#rows + 1] = {
+                    cumulativeWidth = itemWidth,
+                    maxHeight = itemHeight,
+                    verticalOffset = row.verticalOffset + row.maxHeight + scaledVerticalSpacing, 
+                    [1] = item 
+                }
+            else
+                row.maxHeight = math.max(row.maxHeight, itemHeight)
+
+                item._horizontalWrap_xOffset = row.cumulativeWidth
+                if #row > 0 then
+                    item._horizontalWrap_xOffset = item._horizontalWrap_xOffset + scaledHorizontalSpacing
+                end
+
+                row.cumulativeWidth = newCumulativeWidth
+
+                row[#row + 1] = item
+            end
+        end
+
+        local rowCount = #rows
+        cachedWidth = 0
+        for i = 1, rowCount do
+            cachedWidth = math.max(rows[i].cumulativeWidth, cachedWidth)
+        end
+
+        local lastRow = rows[#rows]
+        
+        cachedHeight = lastRow.verticalOffset + lastRow.maxHeight + (rowCount > 1 and verticalSpacing() or 0)
+
+        self._rows = rows
+        
+        return cachedWidth, cachedHeight
+    end
+    function wrap:Position(x, y)
+        for rowIndex, row in ipairs(rows) do
+            for itemIndex, item in ipairs(row) do
+                item:Position(
+                    x + item._horizontalWrap_xOffset + (cachedWidth - row.cumulativeWidth) * xAnchor, 
+                    y + cachedHeight - row.verticalOffset - row.maxHeight
+                )
+            end
+        end
+    end
+
+    return wrap
+end
+
 local function UIGraph(data)
 
     local graph = MasterFramework:Component(true, true)
@@ -977,77 +1048,6 @@ WG.MasterStats = {}
 
 function WG.MasterStats:Refresh()
     refreshRequested = true
-end
-
-local function HorizontalWrap(items, horizontalSpacing, verticalSpacing, xAnchor, yAnchor)
-    local wrap = { items = items }
-    local rows
-
-    local cachedWidth
-    local cachedHeight
-
-    function wrap:Layout(availableWidth, availableHeight)
-        rows = { { cumulativeWidth = 0, maxHeight = 0, verticalOffset = 0 } }
-        local scaledHorizontalSpacing = horizontalSpacing()
-        local scaledVerticalSpacing = verticalSpacing()
-
-        for index, item in ipairs(self.items) do
-            local row = rows[#rows]
-            local itemWidth, itemHeight = item:Layout(availableWidth, availableHeight)
-            local newCumulativeWidth = row.cumulativeWidth + itemWidth
-
-            if #row > 0 then
-                newCumulativeWidth = newCumulativeWidth + scaledHorizontalSpacing
-            end
-
-            if newCumulativeWidth > availableWidth then
-                item._horizontalWrap_xOffset = 0
-                rows[#rows + 1] = {
-                    cumulativeWidth = itemWidth,
-                    maxHeight = itemHeight,
-                    verticalOffset = row.verticalOffset + row.maxHeight + scaledVerticalSpacing, 
-                    [1] = item 
-                }
-            else
-                row.maxHeight = math.max(row.maxHeight, itemHeight)
-
-                item._horizontalWrap_xOffset = row.cumulativeWidth
-                if #row > 0 then
-                    item._horizontalWrap_xOffset = item._horizontalWrap_xOffset + scaledHorizontalSpacing
-                end
-
-                row.cumulativeWidth = newCumulativeWidth
-
-                row[#row + 1] = item
-            end
-        end
-
-        local rowCount = #rows
-        cachedWidth = 0
-        for i = 1, rowCount do
-            cachedWidth = math.max(rows[i].cumulativeWidth, cachedWidth)
-        end
-
-        local lastRow = rows[#rows]
-        
-        cachedHeight = lastRow.verticalOffset + lastRow.maxHeight + (rowCount > 1 and verticalSpacing() or 0)
-
-        self._rows = rows
-        
-        return cachedWidth, cachedHeight
-    end
-    function wrap:Position(x, y)
-        for rowIndex, row in ipairs(rows) do
-            for itemIndex, item in ipairs(row) do
-                item:Position(
-                    x + item._horizontalWrap_xOffset + (cachedWidth - row.cumulativeWidth) * xAnchor, 
-                    y + cachedHeight - row.verticalOffset - row.maxHeight
-                )
-            end
-        end
-    end
-
-    return wrap
 end
     
 function widget:Initialize()
