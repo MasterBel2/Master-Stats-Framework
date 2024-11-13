@@ -592,72 +592,63 @@ local function UIGraph(data)
                 local nextDrawX = xPerPixelWidth
                 local floor_expectedVerticesPerScreenX = math_pow(2, math_floor(math_max(0, math_log(vertexCount * pixelWidthInverse) * oneOverLogOf2)))
 
-                local lowerBound = 1
-                local oneAboveLowerBound = lowerBound + 1
-                local i = 1 + floor_expectedVerticesPerScreenX
-                local shift = floor_expectedVerticesPerScreenX
-                -- Spring.Echo("#1", shift)
-                -- error()
-                -- Spring.Echo(floor_expectedVerticesPerScreenX, xPerPixelWidth)
-                local upperBound
-                local loopCount = 0
-                local loopMax = 100
-                while i < vertexCount and loopCount < loopMax do
-                -- while i < vertexCount do
-                    -- Spring.Echo(" - \n" .. i, xVertices[i], nextDrawX)
-                    local x = xVertices[i]
-                    if upperBound == oneAboveLowerBound then
-                        -- Spring.Echo("#3")
-                        if generatePixel then
-                            minY, maxY = vertex(xVertices[upperBound], yVertices[upperBound - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                if floor_expectedVerticesPerScreenX < 16 then -- From manual testing, this is where the binary search becomes faster
+                    for i = 2, vertexCount do
+                        if xVertices[i] >= nextDrawX then
+                            if generatePixel then
+                                minY, maxY = vertex(xVertices[i], yVertices[i - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                            end
+                            minY, maxY = vertex(xVertices[i], yVertices[i], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                            nextDrawX = nextDrawX + xPerPixelWidth
                         end
-                        minY, maxY = vertex(xVertices[upperBound], yVertices[upperBound], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
-                        shift = floor_expectedVerticesPerScreenX
-                        lowerBound = upperBound
-                        oneAboveLowerBound = lowerBound + 1
-                        i = upperBound + floor_expectedVerticesPerScreenX
-                        upperBound = nil
-                        nextDrawX = nextDrawX + xPerPixelWidth
-                    -- else
-                        -- if not x then
-                            -- Spring.Echo("#error", x, xVertices[i], i, vertexCount, #xVertices, lowerBound, upperBound, oneAboveLowerBound, upperBound == oneAboveLowerBound)
-                        --     error()
-                        -- end
-                    elseif x < nextDrawX then
-                        lowerBound = i
-                        oneAboveLowerBound = lowerBound + 1
-                        if upperBound then
-                            shift = shift * 0.5
-                            -- if shift < 0.5 then
-                                -- Spring.Echo("#A", shift, lowerBound, upperBound, vertexCount)
-                            -- end
-                            i = lowerBound + shift
-                        else
-                            i = i + floor_expectedVerticesPerScreenX
-                        end
-                    elseif x > nextDrawX then
-                        upperBound = i
-                        shift = shift * 0.5
-                        -- if shift < 0.5 then
-                            -- Spring.Echo("#B", shift, lowerBound, upperBound, vertexCount)
-                        -- end
-                        i = lowerBound + shift
-                    elseif x == nextDrawX then
-                        if generatePixel then
-                            minY, maxY = vertex(x, yVertices[i - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
-                        end
-                        minY, maxY = vertex(x, yVertices[i], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
-                        lowerBound = i
-                        oneAboveLowerBound = lowerBound + 1
-                        upperBound = nil
-                        i = i + floor_expectedVerticesPerScreenX
-                        nextDrawX = nextDrawX + xPerPixelWidth
                     end
-                    -- end
-                    -- Spring.Echo("#2", i, lowerBound, upperBound or "nil", nextDrawX)
-                    -- loopCount = loopCount + 1
+                else
+                    local lowerBound = 1
+                    local upperBound
+                    local oneAboveLowerBound = lowerBound + 1
+                    
+                    local i = 1 + floor_expectedVerticesPerScreenX
+                    local shift = floor_expectedVerticesPerScreenX
+                   
+                    while i < vertexCount do
+                        local x = xVertices[i]
+                        if upperBound == oneAboveLowerBound then
+                            if generatePixel then
+                                minY, maxY = vertex(xVertices[upperBound], yVertices[upperBound - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                            end
+                            minY, maxY = vertex(xVertices[upperBound], yVertices[upperBound], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                            shift = floor_expectedVerticesPerScreenX
+                            lowerBound = upperBound
+                            oneAboveLowerBound = lowerBound + 1
+                            i = upperBound + floor_expectedVerticesPerScreenX
+                            upperBound = nil
+                            nextDrawX = nextDrawX + xPerPixelWidth
+                        elseif x < nextDrawX then
+                            lowerBound = i
+                            oneAboveLowerBound = lowerBound + 1
+                            if upperBound then
+                                shift = shift * 0.5
+                                i = lowerBound + shift
+                            else
+                                i = i + floor_expectedVerticesPerScreenX
+                            end
+                        elseif x > nextDrawX then
+                            upperBound = i
+                            shift = shift * 0.5
+                            i = lowerBound + shift
+                        elseif x == nextDrawX then
+                            if generatePixel then
+                                minY, maxY = vertex(x, yVertices[i - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                            end
+                            minY, maxY = vertex(x, yVertices[i], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                            lowerBound = i
+                            oneAboveLowerBound = lowerBound + 1
+                            upperBound = nil
+                            i = i + floor_expectedVerticesPerScreenX
+                            nextDrawX = nextDrawX + xPerPixelWidth
+                        end
+                    end
                 end
-                -- if loopCount == loopMax then error("Terminated loop at " .. loopMax .. " iterations!") end
 
                 minY, maxY = vertex(lastX, lastY, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
                 if generatePixel then
