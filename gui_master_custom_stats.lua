@@ -162,14 +162,8 @@ local gl_Vertex = gl.Vertex
 local GL_LINE_STRIP = GL.LINE_STRIP
 local GL_LINES = GL.LINES
 
-local function returnZero() return 0 end
-local function returnOne() return 1 end
-local function returnFirstDependency(x, dependencyYValues)
-    return dependencyYValues[1]
-end
-
 ------------------------------------------------------------------------------------------------------------
--- Data
+-- Hoisted declarations
 ------------------------------------------------------------------------------------------------------------
 
 local categories
@@ -179,24 +173,26 @@ local selectedGraphTitle
 
 local composedGraphsDir = "LuaUI/Custom Stats/Composed Graphs"
 
-local function SaveComposedGraph(graphName, graph)
-    Spring.CreateDir(composedGraphsDir)
-    local file = io.open(composedGraphsDir .. "/" .. graphName .. ".json", "w")
-    file:write(Json.encode({
-        graphName = graphName,
-        generator = graph._rawGenerator,
-        yUnit = graph.yUnit,
-        dependencyPaths = graph.dependencyPaths
-    }))
-    file:close()
+local function returnZero() return 0 end
+local function returnOne() return 1 end
+local function returnFirstDependency(x, dependencyYValues)
+    return dependencyYValues[1]
 end
 
-local customComposedGraphs = {}
+------------------------------------------------------------------------------------------------------------
+-- Config
+------------------------------------------------------------------------------------------------------------
 
-function widget:MasterStatsCategories()
-    return {
-        ["Custom Composed Graphs"] = customComposedGraphs
-    }
+local config = {}
+
+function widget:SetConfigData(data)
+    config = data or {}
+
+    if type(config.selectedGraphTitle) ~= "string" then config.selectedGraphTitle = nil end
+end
+
+function widget:GetConfigData()
+    return config
 end
 
 ------------------------------------------------------------------------------------------------------------
@@ -914,16 +910,14 @@ local function UISectionedButtonList(name, options, action)
     return buttonList
 end
 
-local function DisplayGraph(graphName)
-    selectedGraphTitle = graphName
-    graphTitle:SetString(graphName .. ":")
-    uiGraph:SetData(graphData[graphName])
+local function DisplayGraph(graph)
+    uiGraph:SetData(graph)
 
-    logarithmicCheckBox:SetChecked(graphData[graphName].showAsLogarithmic)
-    deltaCheckBox:SetChecked(graphData[graphName].showAsDelta)
+    logarithmicCheckBox:SetChecked(graph.showAsLogarithmic)
+    deltaCheckBox:SetChecked(graph.showAsDelta)
 
-    if graphData[graphName].lines then
-        graphLinesMenu.items = table.imap(graphData[graphName].lines, function(_, line)
+    if graph.lines then
+        graphLinesMenu.items = table.imap(graph.lines, function(_, line)
             local color = MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)
             local checkbox = MasterFramework:CheckBox(12, function(_, checked) line.hidden = not checked end)
             checkbox:SetChecked(not line.hidden)
@@ -938,9 +932,9 @@ local function DisplayGraph(graphName)
         end)
     end
 
-    if graphData[graphName]._customComposedGraph then
-        graphDependenciesField.text:SetString(table.concat(table.imap(graphData[graphName].dependencyPaths, function(_, dependencyName) return "\"" .. dependencyName .. "\"" end), ", ") or "")
-        compositionLogicField.text:SetString(graphData[graphName]._rawGenerator)
+    if graph._customComposedGraph then
+        graphDependenciesField.text:SetString(table.concat(table.imap(graph.dependencyPaths, function(_, dependencyName) return "\"" .. dependencyName .. "\"" end), ", ") or "")
+        compositionLogicField.text:SetString(graph._rawGenerator)
         graphFooterStack:SetMembers({
             graphDependenciesField,
             compositionLogicField,
@@ -953,100 +947,142 @@ local function DisplayGraph(graphName)
     end
 end
 
+local function DisplayGraphMatchingName(graphName)
+    config.selectedGraphTitle = graphName
+    if graphData[graphName] then
+        DisplayGraph(graphData[graphName])
+        graphTitle:SetString(graphName .. ":")
+    else
+        DisplayGraph(demoGraph)
+        graphTitle:SetString("Select Graph")
+    end
+end
+
+------------------------------------------------------------------------------------------------------------
+-- Data
+------------------------------------------------------------------------------------------------------------
+
+local function SaveComposedGraph(graphName, graph)
+    Spring.CreateDir(composedGraphsDir)
+    local file = io.open(composedGraphsDir .. "/" .. graphName .. ".json", "w")
+    file:write(Json.encode({
+        graphName = graphName,
+        generator = graph._rawGenerator,
+        yUnit = graph.yUnit,
+        dependencyPaths = graph.dependencyPaths
+    }))
+    file:close()
+end
+
+local customComposedGraphs = {}
+
+function widget:MasterStatsCategories()
+    return {
+        ["Custom Composed Graphs"] = customComposedGraphs
+    }
+end
+
+local function Refresh()
+    categories = {}
+
+    for _, widget in pairs(widgetHandler.widgets) do
+        if widget.MasterStatsCategories then
+            -- categories[name] = { graphs = table }
+            local widgetCategories = widget:MasterStatsCategories()
+
+            for categoryName, widgetCategory in pairs(widgetCategories) do
+                local section = {}
+                for graphName, graph in pairs(widgetCategory) do
+                    section[graphName] = graph
+                end
+
+                local existingCategory = categories[categoryName] or { sections = {} }
+                existingCategory.sections[widget.whInfo.name] = section
+
+                categories[categoryName] = existingCategory
+            end
+        end
+    end
+
+    for categoryKey, category in pairs(categories) do
+        for sectionKey, section in pairs(category.sections) do
+            for graphName, graph in pairs(section) do
+                if graph.dependencyPaths then
+                    graph.lines = {}
+                    if not pcall(function()
+                        graph.dependencies = table.imap(graph.dependencyPaths, function(_, path)
+                            local categoryName, widgetName, graphName = path:match("([^/]+)/([^/]+)/([^/]+)")
+                            local category = categories[categoryName]
+                            if category then
+                                local section = category.sections[widgetName]
+                                if section and section[graphName] then
+                                    return section[graphName]
+                                else
+                                    error()
+                                end
+                            else
+                                error()
+                            end
+                        end)
+                    end) then
+                        graph.dependencies = {}
+                        -- section[graphName] = nil
+                        -- if next(section) == nil then
+                        --     Spring.Echo("Section empty!")
+                        --     category.sections[sectionKey] = nil
+                        --     if next(category.sections) == nil then
+                        --         Spring.Echo("Category empty!")
+                        --         categories[categoryKey] = nil
+                        --     end
+                        -- end
+                    end
+                end
+            end
+        end
+    end
+
+    graphData = {}
+    local uiCategories = table.mapToArray(categories, function(key, value)
+
+        local graphNames = {}
+
+        for _, section in pairs(value.sections) do
+            for graphName, _graphData in pairs(section) do
+                table.insert(graphNames, graphName)
+                graphData[graphName] = _graphData
+            end
+        end
+
+        table.sort(graphNames)
+
+        return {
+            name = key,
+            list = UISectionedButtonList(key, graphNames, function(_, graphName)
+                DisplayGraphMatchingName(graphName)
+            end)
+        }
+    end)
+
+    table.sort(uiCategories, function(a, b) return a.name < b.name end)
+
+    menu:SetMembers(table.imap(uiCategories, function(_, value)
+        return value.list
+    end))
+
+    if config.selectedGraphTitle then
+        DisplayGraphMatchingName(config.selectedGraphTitle)
+    end
+
+    refreshRequested = nil
+end
+
 ------------------------------------------------------------------------------------------------------------
 -- Create / Destroy
 ------------------------------------------------------------------------------------------------------------
 
 function widget:Update()
-
     if refreshRequested then
-        categories = {}
-
-        for _, widget in pairs(widgetHandler.widgets) do
-            if widget.MasterStatsCategories then
-                -- categories[name] = { graphs = table }
-                local widgetCategories = widget:MasterStatsCategories()
-
-                for categoryName, widgetCategory in pairs(widgetCategories) do
-                    local section = {}
-                    for graphName, graph in pairs(widgetCategory) do
-                        section[graphName] = graph
-                    end
-
-                    local existingCategory = categories[categoryName] or { sections = {} }
-                    existingCategory.sections[widget.whInfo.name] = section
-
-                    categories[categoryName] = existingCategory
-                end
-            end
-        end
-
-        for categoryKey, category in pairs(categories) do
-            for sectionKey, section in pairs(category.sections) do
-                for graphName, graph in pairs(section) do
-                    if graph.dependencyPaths then
-                        graph.lines = {}
-                        if not pcall(function()
-                            graph.dependencies = table.imap(graph.dependencyPaths, function(_, path)
-                                local categoryName, widgetName, graphName = path:match("([^/]+)/([^/]+)/([^/]+)")
-                                local category = categories[categoryName]
-                                if category then
-                                    local section = category.sections[widgetName]
-                                    if section and section[graphName] then
-                                        return section[graphName]
-                                    else
-                                        error()
-                                    end
-                                else
-                                    error()
-                                end
-                            end)
-                        end) then
-                            graph.dependencies = {}
-                            -- section[graphName] = nil
-                            -- if next(section) == nil then
-                            --     Spring.Echo("Section empty!")
-                            --     category.sections[sectionKey] = nil
-                            --     if next(category.sections) == nil then
-                            --         Spring.Echo("Category empty!")
-                            --         categories[categoryKey] = nil
-                            --     end
-                            -- end
-                        end
-                    end
-                end
-            end
-        end
-
-        graphData = {}
-        local uiCategories = table.mapToArray(categories, function(key, value)
-
-            local graphNames = {}
-
-            for _, section in pairs(value.sections) do
-                for graphName, _graphData in pairs(section) do
-                    table.insert(graphNames, graphName)
-                    graphData[graphName] = _graphData
-                end
-            end
-
-            table.sort(graphNames)
-
-            return {
-                name = key,
-                list = UISectionedButtonList(key, graphNames, function(_, graphName)
-                    DisplayGraph(graphName)
-                end)
-            }
-        end)
-
-        table.sort(uiCategories, function(a, b) return a.name < b.name end)
-
-        menu:SetMembers(table.imap(uiCategories, function(_, value)
-            return value.list
-        end))
-
-        refreshRequested = nil
+        Refresh()
     end
 end
 
@@ -1116,7 +1152,7 @@ function widget:Initialize()
                     if success and (type(result) == "number") then
                         data._rawGenerator = compositionLogicField.text:GetRawString()
                         data.generator = errorOrGenerator
-                        SaveComposedGraph(selectedGraphTitle, data)
+                        SaveComposedGraph(config.selectedGraphTitle, data)
                     else
                         Spring.Echo(result)
                     end
@@ -1138,8 +1174,8 @@ function widget:Initialize()
                             return
                         end
                         data.dependencyPaths = result
-                        SaveComposedGraph(selectedGraphTitle, data)
-                        WG.MasterStats:Refresh()
+                        SaveComposedGraph(config.selectedGraphTitle, data)
+                        Refresh()
                     end
                 else
                     Spring.Echo(result)
@@ -1181,7 +1217,7 @@ function widget:Initialize()
                             dependencyPaths = {}
                         }
 
-                        WG.MasterStats:Refresh()
+                        Refresh()
                     end
                 ),
                 0
@@ -1259,6 +1295,8 @@ function widget:Initialize()
         MasterFramework.viewportWidth * 0.8, MasterFramework.viewportHeight * 0.8,
         false
     )
+
+    Refresh()
     
     key = MasterFramework:InsertElement(
         resizableFrame,
