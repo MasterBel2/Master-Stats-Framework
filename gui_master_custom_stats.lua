@@ -934,7 +934,7 @@ local function DisplayGraph(graph)
 
     if graph._customComposedGraph then
         graphDependenciesField.text:SetString(table.concat(table.imap(graph.dependencyPaths, function(_, dependencyName) return "\"" .. dependencyName .. "\"" end), ", ") or "")
-        compositionLogicField.text:SetString(graph._rawGenerator)
+        compositionLogicField.text:SetString(graph.rawGenerator)
         graphFooterStack:SetMembers({
             graphDependenciesField,
             compositionLogicField,
