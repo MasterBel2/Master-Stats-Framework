@@ -684,7 +684,7 @@ local function UIGraph(data)
                     local shift = floor_expectedVerticesPerScreenX
                    
                     while i < vertexCount do
-                        local x = xVertices[i]
+                        local x = xVertices[i] or lastX
                         if upperBound == oneAboveLowerBound then
                             if generatePixel then
                                 minY, maxY = vertex(xVertices[upperBound], yVertices[upperBound - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
