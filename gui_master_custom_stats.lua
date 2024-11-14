@@ -199,6 +199,10 @@ function widget:MasterStatsCategories()
     }
 end
 
+------------------------------------------------------------------------------------------------------------
+-- Formatting
+------------------------------------------------------------------------------------------------------------
+
 local function format(number, unit)
     if unit == "Frames" then
         unit = "Seconds"
@@ -664,6 +668,7 @@ local function UIGraph(data)
                 local floor_expectedVerticesPerScreenX = math_pow(2, math_floor(math_max(0, math_log(vertexCount * pixelWidthInverse) * oneOverLogOf2)))
 
                 if floor_expectedVerticesPerScreenX < 16 then -- From manual testing, this is where the binary search becomes faster
+                    -- Linear search
                     for i = 2, vertexCount do
                         if xVertices[i] >= nextDrawX then
                             if generatePixel then
@@ -674,6 +679,7 @@ local function UIGraph(data)
                         end
                     end
                 else
+                    -- Binary search
                     local lowerBound = 1
                     local upperBound
                     local oneAboveLowerBound = lowerBound + 1
