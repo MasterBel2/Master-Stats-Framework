@@ -35,7 +35,7 @@ end
             - (array) x, y: the array of x/y values, respectively. vertices.x[n] corresponds to vertices.y[n]. The data is structured like this to achieve SIGNIFICANT speedups.
 
     Dependent Table:
-    - (array)  dependencyPaths: Each value is a string containing the category, widget name, and name of the graph to be depended upon.
+    - (array)  dependencyNames: Each value is a string containing the name of the graph to be depended upon.
                                 Each dependency must have the xUnit and the same line count, color, and titles.
     - (string) yUnit: specifies the units for the y axis. Custom formatting will be provided for the values "Frames" and "Seconds" - they will be shown with `hrs, mins, secs` formatting.
 
@@ -969,7 +969,7 @@ local function SaveComposedGraph(graphName, graph)
         graphName = graphName,
         generator = graph._rawGenerator,
         yUnit = graph.yUnit,
-        dependencyPaths = graph.dependencyPaths
+        dependencyNames = graph.dependencyNames
     }))
     file:close()
 end
@@ -1004,43 +1004,6 @@ local function Refresh()
         end
     end
 
-    for categoryKey, category in pairs(categories) do
-        for sectionKey, section in pairs(category.sections) do
-            for graphName, graph in pairs(section) do
-                if graph.dependencyPaths then
-                    graph.lines = {}
-                    if not pcall(function()
-                        graph.dependencies = table.imap(graph.dependencyPaths, function(_, path)
-                            local categoryName, widgetName, graphName = path:match("([^/]+)/([^/]+)/([^/]+)")
-                            local category = categories[categoryName]
-                            if category then
-                                local section = category.sections[widgetName]
-                                if section and section[graphName] then
-                                    return section[graphName]
-                                else
-                                    error()
-                                end
-                            else
-                                error()
-                            end
-                        end)
-                    end) then
-                        graph.dependencies = {}
-                        -- section[graphName] = nil
-                        -- if next(section) == nil then
-                        --     Spring.Echo("Section empty!")
-                        --     category.sections[sectionKey] = nil
-                        --     if next(category.sections) == nil then
-                        --         Spring.Echo("Category empty!")
-                        --         categories[categoryKey] = nil
-                        --     end
-                        -- end
-                    end
-                end
-            end
-        end
-    end
-
     graphData = {}
     local uiCategories = table.mapToArray(categories, function(key, value)
 
@@ -1062,6 +1025,37 @@ local function Refresh()
             end)
         }
     end)
+
+    for categoryKey, category in pairs(categories) do
+        for sectionKey, section in pairs(category.sections) do
+            for graphName, graph in pairs(section) do
+                if graph.dependencyNames then
+                    graph.lines = {}
+                    -- if not pcall(function()
+                        Spring.Echo(graphName)
+                        graph.dependencies = table.imap(graph.dependencyNames, function(index, dependencyName)
+                            Spring.Echo("Dependency " .. index .. ": " .. dependencyName)
+                            local dependency = graphData[dependencyName]
+                            -- Spring.Echo(dependencyName, dependency)
+                            if not dependency then Spring.Echo("Jsyn"); error() end
+                            return dependency
+                        end)
+                    -- end) then
+                        -- graph.dependencies = {}
+                        -- section[graphName] = nil
+                        -- if next(section) == nil then
+                        --     Spring.Echo("Section empty!")
+                        --     category.sections[sectionKey] = nil
+                        --     if next(category.sections) == nil then
+                        --         Spring.Echo("Category empty!")
+                        --         categories[categoryKey] = nil
+                        --     end
+                        -- end
+                    -- end
+                end
+            end
+        end
+    end
 
     table.sort(uiCategories, function(a, b) return a.name < b.name end)
 
@@ -1105,7 +1099,7 @@ function widget:Initialize()
                 _customComposedGraph = true,
                 yUnit = data.yUnit,
                 rawGenerator = data.generator,
-                dependencyPaths = data.dependencyPaths
+                dependencyNames = data.dependencyNames or data.dependencyPaths
             }
 
             local func = loadstring("return function(x, dependencyYValues)\nreturn " .. data.generator .. "\nend")
@@ -1173,7 +1167,7 @@ function widget:Initialize()
                         if type(value) ~= "string" then
                             return
                         end
-                        data.dependencyPaths = result
+                        data.dependencyNames = result
                         SaveComposedGraph(config.selectedGraphTitle, data)
                         Refresh()
                     end
@@ -1214,7 +1208,7 @@ function widget:Initialize()
                             yUnit = "",
                             _rawGenerator = "",
                             generator = returnFirstDependency,
-                            dependencyPaths = {}
+                            dependencyNames = {}
                         }
 
                         Refresh()
