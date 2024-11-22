@@ -448,19 +448,19 @@ local function UIGraph(data)
                             while line.vertices.x[i] and scaledAnchor > line.vertices.x[i] do
                                 i = i + 1
                             end
-                            local _string = format(scaledAnchor, data.xUnit) .. ": " .. (line.vertices.y[i - 1] and format(line.vertices.y[i - 1], data.yUnit) or "???")
+                            local _string = (line.vertices.y[i - 1] and format(line.vertices.y[i - 1], data.yUnit) or "???")
 
                             if scaledLimit then
                                 i = 1
                                 while line.vertices.x[i] and scaledLimit > line.vertices.x[i] do
                                     i = i + 1
                                 end
-                                local limitString = format(scaledLimit, data.xUnit) .. ": " .. (line.vertices.y[i - 1] and format(line.vertices.y[i - 1], data.yUnit) or "???")
+                                local limitString = (line.vertices.y[i - 1] and format(line.vertices.y[i - 1], data.yUnit) or "???")
 
                                 if scaledLimit < scaledAnchor then
-                                    _string = limitString .. ", " .. _string
+                                    _string = limitString .. " - " .. _string
                                 else
-                                    _string = _string .. ", " .. limitString
+                                    _string = _string .. " - " .. limitString
                                 end
                             end
 
@@ -469,6 +469,25 @@ local function UIGraph(data)
 
                         return member
                     end)
+
+                    local xRange = MasterFramework:Text("")
+                    function xRange:Update(scaledAnchor, scaledLimit)
+                        local _string = format(scaledAnchor, data.xUnit)
+
+                        if scaledLimit then
+                            local limitString = format(scaledLimit, data.xUnit)
+
+                            if scaledLimit < scaledAnchor then
+                                _string = limitString .. " - " .. _string
+                            else
+                                _string = _string .. " - " .. limitString
+                            end
+                        end
+
+                        self:SetString(_string)
+                    end
+                    table.insert(stackMembers, 1, xRange)
+
                     self.overlay = MasterFramework:AbsoluteOffsetFromTopLeft(MasterFramework:PrimaryFrame(MasterFramework:Background(
                         MasterFramework:MarginAroundRect(
                             MasterFramework:VerticalStack(stackMembers, MasterFramework:AutoScalingDimension(2), 0),
