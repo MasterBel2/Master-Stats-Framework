@@ -738,6 +738,7 @@ local function UIGraph(data)
                             upperBound = nil
                             i = i + floor_expectedVerticesPerScreenX
                             nextDrawX = nextDrawX + xPerPixelWidth
+                            shift = floor_expectedVerticesPerScreenX
                         end
                     end
                 end
