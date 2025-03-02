@@ -1014,14 +1014,17 @@ local function UIGraphContainer()
             deltaCheckBox:SetChecked(graph.showAsDelta)
 
             if graph.lines then
-                graphLinesMenu.items = table.imap(graph.lines, function(_, line)
+                graphLinesMenu.items = table.imap(graph.lines, function(index, line)
                     local color = MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)
                     local checkbox = MasterFramework:CheckBox(12, function(_, checked) 
                         local _, ctrl, _, _ = Spring.GetModKeyState()
                         if ctrl then
-                            for _, otherLine in ipairs(graph.lines) do
+                            line.hidden = false
+                            graphLinesMenu.items[index].checkbox:SetChecked(not line.hidden)
+                            for otherIndex, otherLine in ipairs(graph.lines) do
                                 if otherLine ~= line then
-                                    line.hidden = true
+                                    otherLine.hidden = true
+                                    graphLinesMenu.items[otherIndex].checkbox:SetChecked(not otherLine.hidden)
                                 end
                             end
                         else
@@ -1029,7 +1032,7 @@ local function UIGraphContainer()
                         end
                     end)
                     checkbox:SetChecked(not line.hidden)
-                    return MasterFramework:HorizontalStack(
+                    local stack = MasterFramework:HorizontalStack(
                         {
                             checkbox,
                             line.title and MasterFramework:Text(line.title, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3))
@@ -1037,6 +1040,8 @@ local function UIGraphContainer()
                         MasterFramework:AutoScalingDimension(8),
                         0.5
                     )
+                    stack.checkbox = checkbox
+                    return stack
                 end)
             end
 
