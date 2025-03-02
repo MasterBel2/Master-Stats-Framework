@@ -437,34 +437,40 @@ local function UIGraph(data)
                 else
                     local stackMembers = table.imap(data.lines, function(_, line)
                         local valueText = MasterFramework:Text("")
+                        local x = { MasterFramework:Text(line.title or "<Unknown>", MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)), valueText }
                         local member = MasterFramework:HorizontalStack(
-                            { MasterFramework:Text(line.title or "<Unknown>", MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)), valueText },
+                            emptyTable,
                             MasterFramework:AutoScalingDimension(2),
                             0
                         )
 
                         function member:Update(scaledAnchor, scaledLimit)
-                            local i = 1
-                            while line.vertices.x[i] and scaledAnchor > line.vertices.x[i] do
-                                i = i + 1
-                            end
-                            local _string = (line.vertices.y[i - 1] and format(line.vertices.y[i - 1], data.yUnit) or "???")
-
-                            if scaledLimit then
-                                i = 1
-                                while line.vertices.x[i] and scaledLimit > line.vertices.x[i] do
+                            if line.hidden then
+                                member:SetMembers(emptyTable)
+                            else
+                                member:SetMembers(x)
+                                local i = 1
+                                while line.vertices.x[i] and scaledAnchor > line.vertices.x[i] do
                                     i = i + 1
                                 end
-                                local limitString = (line.vertices.y[i - 1] and format(line.vertices.y[i - 1], data.yUnit) or "???")
+                                local _string = (line.vertices.y[i - 1] and format(line.vertices.y[i - 1], data.yUnit) or "???")
 
-                                if scaledLimit < scaledAnchor then
-                                    _string = limitString .. " - " .. _string
-                                else
-                                    _string = _string .. " - " .. limitString
+                                if scaledLimit then
+                                    i = 1
+                                    while line.vertices.x[i] and scaledLimit > line.vertices.x[i] do
+                                        i = i + 1
+                                    end
+                                    local limitString = (line.vertices.y[i - 1] and format(line.vertices.y[i - 1], data.yUnit) or "???")
+
+                                    if scaledLimit < scaledAnchor then
+                                        _string = limitString .. " - " .. _string
+                                    else
+                                        _string = _string .. " - " .. limitString
+                                    end
                                 end
+                                valueText:SetString(_string)
                             end
 
-                            valueText:SetString(_string)
                         end
 
                         return member
