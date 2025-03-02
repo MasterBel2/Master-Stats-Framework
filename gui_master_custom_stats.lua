@@ -143,6 +143,7 @@ local math_floor = math.floor
 local math_pow = math.pow
 
 local oneOverLogOf2 = 1 / math_log(2)
+local emptyTable = {}
 
 local reduce
 
@@ -509,6 +510,7 @@ local function UIGraph(data)
 
                     local key = MasterFramework:InsertElement(self.overlay, "Graph Overlay", MasterFramework.layerRequest.top())
                     self.overlay.key = key
+                    currentOverlay = self.overlay
                 end
 
                 local xScale = (maxX - minX) / cachedWidth
@@ -519,6 +521,7 @@ local function UIGraph(data)
                 if self.overlay then
                     MasterFramework:RemoveElement(self.overlay.key)
                     self.overlay = nil
+                    currentOverlay = nil
                 end
             end
         end
@@ -887,21 +890,184 @@ local function UIGraph(data)
     return graph
 end
 
+local function UIGraphContainer()
+    local graph = demoGraph
+    local uiGraph = UIGraph(graph)
+
+    local graphLinesMenu = HorizontalWrap({}, MasterFramework:AutoScalingDimension(8), MasterFramework:AutoScalingDimension(2), 0.5, 0.5)
+
+    local logarithmicCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsLogarithmic(checked) end)
+    local deltaCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsDelta(checked) end)
+    local graphTitle = MasterFramework:Text("Demo Graph: ")
+
+    local compositionLogicField = WG.LuaTextEntry(MasterFramework, "", "Enter Composition Logic Here", function()
+        local data = uiGraph:GetData()
+        if data and data._customComposedGraph then
+            local func = loadstring("return function(x, dependencyYValues)\nreturn " .. compositionLogicField.text:GetRawString() .. "\nend")
+            if func then
+                local success, errorOrGenerator = pcall(func)
+                if success and (type(errorOrGenerator) == "function") then
+                    local yValues = table.repeating(#data.lines, returnZero)
+                    local success, result = pcall(errorOrGenerator, 0, yValues)
+                    if success and (type(result) == "number") then
+                        data._rawGenerator = compositionLogicField.text:GetRawString()
+                        data.generator = errorOrGenerator
+                        SaveComposedGraph(config.selectedGraphTitle, data)
+                    else
+                        Spring.Echo(result)
+                    end
+                else
+                    Spring.Echo(errorOrGenerator)
+                end
+            end
+        end
+    end)
+    local graphDependenciesField = WG.LuaTextEntry(MasterFramework, "", "Enter Graph Dependencies Here", function()
+        local data = uiGraph:GetData()
+        if data and data._customComposedGraph then
+            local func = loadstring("return { " .. graphDependenciesField.text:GetRawString() .. " }")
+            if func then
+                local success, result = pcall(func)
+                if success and (type(result) == "table") then
+                    for _, value in ipairs(result) do
+                        if type(value) ~= "string" then
+                            return
+                        end
+                        data.dependencyNames = result
+                        SaveComposedGraph(config.selectedGraphTitle, data)
+                        Refresh()
+                    end
+                else
+                    Spring.Echo(result)
+                end
+            end
+        end
+    end)
+    local graphFooterStack = MasterFramework:VerticalStack({}, MasterFramework:AutoScalingDimension(8), 0)
+    -- TODO: Check for uses
+    local wrappedGraphLinesMenu = MasterFramework:MarginAroundRect(
+        graphLinesMenu, 
+        MasterFramework:AutoScalingDimension(20),
+        MasterFramework:AutoScalingDimension(20),
+        MasterFramework:AutoScalingDimension(20),
+        MasterFramework:AutoScalingDimension(20)
+    )
+
+    local graphContainer = MasterFramework:VerticalHungryStack(
+        MasterFramework:HorizontalStack({
+                graphTitle,
+                logarithmicCheckBox, MasterFramework:Text("Logarithmic"),
+                deltaCheckBox, MasterFramework:Text("Delta")
+            },
+            MasterFramework:AutoScalingDimension(8),
+            0.5
+        ),
+        MasterFramework:Background(
+            MasterFramework:MouseOverResponder(
+                MasterFramework:MousePressResponder(
+                    uiGraph,
+                    -- MasterFramework:DrawingGroup(uiGraph, true),
+                    function(responder, x, y, button)
+                        local baseX, _ = responder:CachedPosition()
+                        uiGraph:Select(x - baseX)
+                        return true
+                    end,
+                    function(responder, x, y, dx, dy, button)
+                        local responderX, _, responderWidth, _ = responder:Geometry()
+                        if button == 1 then
+                            local baseX, _ = responder:CachedPosition()
+                            local selectionAnchor, _ = uiGraph:GetSelection()
+                            uiGraph:Select(selectionAnchor, math.max(math.min(x - baseX, responderWidth), 0))
+                        end
+                    end,
+                    function(responder, x, y, button) end
+                ),
+                function(responder, x, y)
+                    local _, selectionLimit = uiGraph:GetSelection()
+                    if not selectionLimit then
+                        local baseX, _ = responder:CachedPosition()
+                        uiGraph:Select(x - baseX)
+                    end
+                end,
+                function() end,
+                function()
+                    local _, selectionLimit = uiGraph:GetSelection()
+                    if not selectionLimit then
+                        uiGraph:Select()
+                    end
+                end
+            ),
+            { MasterFramework.color.baseBackgroundColor },
+            MasterFramework:AutoScalingDimension(0)
+        ),
+        graphFooterStack,
+        0.5
+    )
+
+    function graphContainer:SetData(newGraph, title)
+        if newGraph ~= graph then
+            graph = newGraph
+            uiGraph:SetData(graph)
+            graphTitle:SetString(title)
+
+            logarithmicCheckBox:SetChecked(graph.showAsLogarithmic)
+            deltaCheckBox:SetChecked(graph.showAsDelta)
+
+            if graph.lines then
+                graphLinesMenu.items = table.imap(graph.lines, function(_, line)
+                    local color = MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)
+                    local checkbox = MasterFramework:CheckBox(12, function(_, checked) 
+                        local _, ctrl, _, _ = Spring.GetModKeyState()
+                        if ctrl then
+                            for _, otherLine in ipairs(graph.lines) do
+                                if otherLine ~= line then
+                                    line.hidden = true
+                                end
+                            end
+                        else
+                            line.hidden = not checked
+                        end
+                    end)
+                    checkbox:SetChecked(not line.hidden)
+                    return MasterFramework:HorizontalStack(
+                        {
+                            checkbox,
+                            line.title and MasterFramework:Text(line.title, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3))
+                        },
+                        MasterFramework:AutoScalingDimension(8),
+                        0.5
+                    )
+                end)
+            end
+
+            if graph._customComposedGraph then
+                graphDependenciesField.text:SetString(table.concat(table.imap(graph.dependencyNames, function(_, dependencyName) return "\"" .. dependencyName .. "\"" end), ", ") or "")
+                compositionLogicField.text:SetString(graph.rawGenerator)
+                graphFooterStack:SetMembers({
+                    graphDependenciesField,
+                    compositionLogicField,
+                    wrappedGraphLinesMenu
+                })
+            else
+                graphFooterStack:SetMembers({
+                    wrappedGraphLinesMenu
+                })
+            end
+        end
+    end
+
+    return graphContainer
+end
+
 ------------------------------------------------------------------------------------------------------------
 -- UI Element Var Declarations
 ------------------------------------------------------------------------------------------------------------
 
-local uiGraph
+local uiGraphContainer
 local menu
-local logarithmicCheckBox
-local deltaCheckBox
-local graphLinesMenu
 local uiCategories = {}
 
-local compositionLogicField
-local graphDependenciesField
-local wrappedGraphLinesMenu
-local graphFooterStack
+local currentOverlay
 
 local refreshRequested = true
 
@@ -936,51 +1102,12 @@ local function UISectionedButtonList(name, options, action)
     return buttonList
 end
 
-local function DisplayGraph(graph)
-    uiGraph:SetData(graph)
-
-    logarithmicCheckBox:SetChecked(graph.showAsLogarithmic)
-    deltaCheckBox:SetChecked(graph.showAsDelta)
-
-    if graph.lines then
-        graphLinesMenu.items = table.imap(graph.lines, function(_, line)
-            local color = MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)
-            local checkbox = MasterFramework:CheckBox(12, function(_, checked) line.hidden = not checked end)
-            checkbox:SetChecked(not line.hidden)
-            return MasterFramework:HorizontalStack(
-                {
-                    checkbox,
-                    line.title and MasterFramework:Text(line.title, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3))
-                },
-                MasterFramework:AutoScalingDimension(8),
-                0.5
-            )
-        end)
-    end
-
-    if graph._customComposedGraph then
-        graphDependenciesField.text:SetString(table.concat(table.imap(graph.dependencyNames, function(_, dependencyName) return "\"" .. dependencyName .. "\"" end), ", ") or "")
-        compositionLogicField.text:SetString(graph.rawGenerator)
-        graphFooterStack:SetMembers({
-            graphDependenciesField,
-            compositionLogicField,
-            wrappedGraphLinesMenu
-        })
-    else
-        graphFooterStack:SetMembers({
-            wrappedGraphLinesMenu
-        })
-    end
-end
-
 local function DisplayGraphMatchingName(graphName)
     config.selectedGraphTitle = graphName
     if graphData[graphName] then
-        DisplayGraph(graphData[graphName])
-        graphTitle:SetString(graphName .. ":")
+        uiGraphContainer:SetData(graphData[graphName], graphName .. ":")
     else
-        DisplayGraph(demoGraph)
-        graphTitle:SetString("Select Graph")
+        uiGraphContainer:SetData(demoGraph, "Select Graph")
     end
 end
 
@@ -1057,17 +1184,17 @@ local function Refresh()
             for graphName, graph in pairs(section) do
                 if graph.dependencyNames then
                     graph.lines = {}
-                    -- if not pcall(function()
+                    if not pcall(function()
                         Spring.Echo(graphName)
                         graph.dependencies = table.imap(graph.dependencyNames, function(index, dependencyName)
                             Spring.Echo("Dependency " .. index .. ": " .. dependencyName)
                             local dependency = graphData[dependencyName]
                             -- Spring.Echo(dependencyName, dependency)
-                            if not dependency then Spring.Echo("Jsyn"); error() end
+                            if not dependency then error() end
                             return dependency
                         end)
-                    -- end) then
-                        -- graph.dependencies = {}
+                    end) then
+                        graph.dependencies = {}
                         -- section[graphName] = nil
                         -- if next(section) == nil then
                         --     Spring.Echo("Section empty!")
@@ -1077,7 +1204,7 @@ local function Refresh()
                         --         categories[categoryKey] = nil
                         --     end
                         -- end
-                    -- end
+                    end
                 end
             end
         end
@@ -1146,72 +1273,13 @@ function widget:Initialize()
     table = MasterFramework.table
     reduce = table.reduce
 
-    uiGraph = UIGraph(demoGraph)
-
     menu = MasterFramework:VerticalStack(
         {},
         MasterFramework:AutoScalingDimension(8),
         0
     )
-
-    graphLinesMenu = HorizontalWrap({}, MasterFramework:AutoScalingDimension(8), MasterFramework:AutoScalingDimension(2), 0.5, 0.5)
-
-    logarithmicCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsLogarithmic(checked) end)
-    deltaCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsDelta(checked) end)
-    graphTitle = MasterFramework:Text("Demo Graph: ")
-
-    compositionLogicField = WG.LuaTextEntry(MasterFramework, "", "Enter Composition Logic Here", function()
-        local data = uiGraph:GetData()
-        if data and data._customComposedGraph then
-            local func = loadstring("return function(x, dependencyYValues)\nreturn " .. compositionLogicField.text:GetRawString() .. "\nend")
-            if func then
-                local success, errorOrGenerator = pcall(func)
-                if success and (type(errorOrGenerator) == "function") then
-                    local yValues = table.repeating(#data.lines, returnZero)
-                    local success, result = pcall(errorOrGenerator, 0, yValues)
-                    if success and (type(result) == "number") then
-                        data._rawGenerator = compositionLogicField.text:GetRawString()
-                        data.generator = errorOrGenerator
-                        SaveComposedGraph(config.selectedGraphTitle, data)
-                    else
-                        Spring.Echo(result)
-                    end
-                else
-                    Spring.Echo(errorOrGenerator)
-                end
-            end
-        end
-    end)
-    graphDependenciesField = WG.LuaTextEntry(MasterFramework, "", "Enter Graph Dependencies Here", function()
-        local data = uiGraph:GetData()
-        if data and data._customComposedGraph then
-            local func = loadstring("return { " .. graphDependenciesField.text:GetRawString() .. " }")
-            if func then
-                local success, result = pcall(func)
-                if success and (type(result) == "table") then
-                    for _, value in ipairs(result) do
-                        if type(value) ~= "string" then
-                            return
-                        end
-                        data.dependencyNames = result
-                        SaveComposedGraph(config.selectedGraphTitle, data)
-                        Refresh()
-                    end
-                else
-                    Spring.Echo(result)
-                end
-            end
-        end
-    end)
-    wrappedGraphLinesMenu = MasterFramework:MarginAroundRect(
-        graphLinesMenu, 
-        MasterFramework:AutoScalingDimension(20), 
-        MasterFramework:AutoScalingDimension(20), 
-        MasterFramework:AutoScalingDimension(20), 
-        MasterFramework:AutoScalingDimension(20)
-    )
-
-    graphFooterStack = MasterFramework:VerticalStack({}, MasterFramework:AutoScalingDimension(8), 0)
+    
+    uiGraphContainer = UIGraphContainer()
 
     local split = MasterFramework:HorizontalStack(
         {
@@ -1242,55 +1310,7 @@ function widget:Initialize()
                 ),
                 0
             ),
-            MasterFramework:VerticalHungryStack(
-                MasterFramework:HorizontalStack({
-                        graphTitle,
-                        logarithmicCheckBox, MasterFramework:Text("Logarithmic"),
-                        deltaCheckBox, MasterFramework:Text("Delta")
-                    },
-                    MasterFramework:AutoScalingDimension(8),
-                    0.5
-                ),
-                MasterFramework:Background(
-                    MasterFramework:MouseOverResponder(
-                        MasterFramework:MousePressResponder(
-                            MasterFramework:DrawingGroup(uiGraph, true),
-                            function(responder, x, y, button)
-                                local baseX, _ = responder:CachedPosition()
-                                uiGraph:Select(x - baseX)
-                                return true
-                            end,
-                            function(responder, x, y, dx, dy, button)
-                                local responderX, _, responderWidth, _ = responder:Geometry()
-                                if button == 1 then
-                                    local baseX, _ = responder:CachedPosition()
-                                    local selectionAnchor, _ = uiGraph:GetSelection()
-                                    uiGraph:Select(selectionAnchor, math.max(math.min(x - baseX, responderWidth), 0))
-                                end
-                            end,
-                            function(responder, x, y, button) end
-                        ),
-                        function(responder, x, y)
-                            local _, selectionLimit = uiGraph:GetSelection()
-                            if not selectionLimit then
-                                local baseX, _ = responder:CachedPosition()
-                                uiGraph:Select(x - baseX)
-                            end
-                        end,
-                        function() end,
-                        function()
-                            local _, selectionLimit = uiGraph:GetSelection()
-                            if not selectionLimit then
-                                uiGraph:Select()
-                            end
-                        end
-                    ),
-                    { MasterFramework.color.baseBackgroundColor },
-                    MasterFramework:AutoScalingDimension(0)
-                ),
-                graphFooterStack,
-                0.5
-            )
+            uiGraphContainer
         },
         MasterFramework:AutoScalingDimension(8),
         1
@@ -1326,8 +1346,8 @@ function widget:Initialize()
 end
 
 function widget:Shutdown()
-    if uiGraph.overlay then
-        MasterFramework:RemoveElement(uiGraph.overlay.key)
+    if currentOverlay then
+        MasterFramework:RemoveElement(currentOverlay.key)
     end
     MasterFramework:RemoveElement(key)
     WG.MasterStats = nil
