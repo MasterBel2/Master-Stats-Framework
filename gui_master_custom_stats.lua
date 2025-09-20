@@ -1190,9 +1190,9 @@ local function Refresh()
                 if graph.dependencyNames then
                     graph.lines = {}
                     if not pcall(function()
-                        Spring.Echo(graphName)
+                        -- Spring.Echo(graphName)
                         graph.dependencies = table.imap(graph.dependencyNames, function(index, dependencyName)
-                            Spring.Echo("Dependency " .. index .. ": " .. dependencyName)
+                            -- Spring.Echo("Dependency " .. index .. ": " .. dependencyName)
                             local dependency = graphData[dependencyName]
                             -- Spring.Echo(dependencyName, dependency)
                             if not dependency then error() end
