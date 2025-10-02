@@ -417,7 +417,10 @@ local function UIGraph(data)
 
     local lastDrawnY
 
-    function graph:Select(anchor, limit)
+    function graph:Select(anchor, limit, graphXOffset)
+        graphXOffset = graphXOffset or 0
+        local _, graphYOffset = self:RegisteredDrawingGroup():AbsolutePosition()
+
         if selectionAnchor ~= anchor or selectionLimit ~= limit then
             selectionAnchor = anchor
             selectionLimit = limit
@@ -434,7 +437,7 @@ local function UIGraph(data)
 
                 if self.overlay then
                      -- + 1 offsets from selection indicator & graph top border
-                    self.overlay:SetOffsets(overlayX + 1, MasterFramework.viewportHeight - overlayY + 1)
+                    self.overlay:SetOffsets(graphXOffset + overlayX + 1, MasterFramework.viewportHeight - (graphYOffset + overlayY) + 1)
                 else
                     local stackMembers = table.imap(data.lines, function(_, line)
                         local valueText = MasterFramework:Text("")
@@ -505,7 +508,7 @@ local function UIGraph(data)
                         ),
                         { MasterFramework.color.baseBackgroundColor },
                         MasterFramework:AutoScalingDimension(5)
-                    )), overlayX, overlayY)
+                    )), graphXOffset + overlayX + 1, MasterFramework.viewportHeight - (graphYOffset + overlayY) + 1)
                     self.overlay.stackMembers = stackMembers
 
                     local key = MasterFramework:InsertElement(self.overlay, "Graph Overlay", MasterFramework.layerRequest.top())
@@ -515,7 +518,7 @@ local function UIGraph(data)
 
                 local xScale = (maxX - minX) / cachedWidth
                 for _, member in ipairs(self.overlay.stackMembers) do
-                    member:Update(xScale * anchor, limit and (limit * xScale))
+                    pcall(member.Update, member, xScale * anchor, limit and (limit * xScale))
                 end
             else
                 if self.overlay then
@@ -772,12 +775,18 @@ local function UIGraph(data)
         self:RegisterDrawingGroup()
         self:NeedsLayout()
         
-        local _, _, _minX, _maxX, _minY, _maxY = graphMetadata(data, availableWidth)
-        minX = _minX
-        maxX = _maxX
-        minY = _minY
-        maxY = _maxY
-
+        local success, _, _, _minX, _maxX, _minY, _maxY = pcall(graphMetadata, data, availableWidth)
+        if success then
+            minX = _minX
+            maxX = _maxX
+            minY = _minY
+            maxY = _maxY
+        else
+            minX = 0
+            maxX = 1
+            minY = 0
+            maxY = 1
+        end
         verticalRatio = (maxY - minY) / availableHeight
 
         cachedWidth = availableWidth
@@ -870,17 +879,19 @@ local function UIGraph(data)
 
         gl_BeginEnd(GL_LINES, DrawGraphHorizontalLines)
         
-        gl_PushMatrix()
+        if minX ~= maxX and minY ~= maxY then
+            gl_PushMatrix()
 
-        gl_Scale(cachedWidth / (maxX - minX), cachedHeight / (maxY - minY), 1)
-        gl_Translate(0, -minY, 0)
+            gl_Scale(cachedWidth / (maxX - minX), cachedHeight / (maxY - minY), 1)
+            gl_Translate(0, -minY, 0)
 
-        for _, line in ipairs(data.lines) do
-            if not line.hidden then
-                gl_BeginEnd(GL_LINE_STRIP, DrawGraphData, line, cachedWidth)
+            for _, line in ipairs(data.lines) do
+                if not line.hidden then
+                    gl_BeginEnd(GL_LINE_STRIP, pcall, DrawGraphData, line, cachedWidth)
+                end
             end
+            gl_PopMatrix()
         end
-        gl_PopMatrix()
 
         gl_BeginEnd(GL_LINES, DrawGraphEdges)
         
@@ -965,19 +976,20 @@ local function UIGraphContainer()
         MasterFramework:Background(
             MasterFramework:MouseOverResponder(
                 MasterFramework:MousePressResponder(
-                    uiGraph,
                     -- MasterFramework:DrawingGroup(uiGraph, true),
+                    MasterFramework:DrawingGroup(uiGraph, true),
                     function(responder, x, y, button)
-                        local baseX, _ = responder:CachedPosition()
-                        uiGraph:Select(x - baseX)
+                        local baseX, _ = responder:CachedPositionTranslatedToGlobalContext()
+                        uiGraph:Select(x - baseX, nil, baseX)
+                        -- uiGraph:Select(x - baseX)
                         return true
                     end,
                     function(responder, x, y, dx, dy, button)
-                        local responderX, _, responderWidth, _ = responder:Geometry()
+                        local responderWidth, _ = responder:Size()
                         if button == 1 then
-                            local baseX, _ = responder:CachedPosition()
+                            local baseX, _ = responder:CachedPositionTranslatedToGlobalContext()
                             local selectionAnchor, _ = uiGraph:GetSelection()
-                            uiGraph:Select(selectionAnchor, math.max(math.min(x - baseX, responderWidth), 0))
+                            uiGraph:Select(selectionAnchor, math.max(math.min(x - baseX, responderWidth), 0), baseX)
                         end
                     end,
                     function(responder, x, y, button) end
@@ -985,8 +997,8 @@ local function UIGraphContainer()
                 function(responder, x, y)
                     local _, selectionLimit = uiGraph:GetSelection()
                     if not selectionLimit then
-                        local baseX, _ = responder:CachedPosition()
-                        uiGraph:Select(x - baseX)
+                        local baseX, _ = responder:CachedPositionTranslatedToGlobalContext()
+                        uiGraph:Select(x - baseX, nil, baseX)
                     end
                 end,
                 function() end,
