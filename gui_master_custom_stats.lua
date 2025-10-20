@@ -660,8 +660,10 @@ local function UIGraph(data)
             local maxX = -math_huge
             for i = 1, #data.lines do
                 local line = data.lines[i]
-                minX = math_min(minX, line.vertices.x[1])
-                maxX = math_max(maxX, line.vertices.x[#line.vertices.x])
+                if not line.hidden then
+                    minX = math_min(minX, line.vertices.x[1])
+                    maxX = math_max(maxX, line.vertices.x[#line.vertices.x])
+                end
             end
 
             local generatePixel = data.discrete and not data.showAsDelta
@@ -670,99 +672,101 @@ local function UIGraph(data)
 
             for i = 1, #data.lines do
                 local line = data.lines[i]
-                vertexCounts[line] = 0
-                if not vertexXCoordinates[line] then
-                    vertexXCoordinates[line] = {}
-                    vertexYCoordinates[line] = {}
-                end
-
-                local vertices = line.vertices
-                local xVertices = vertices.x
-                local yVertices = vertices.y
-                local vertexCount = #xVertices
-                local firstX = xVertices[1]
-                local firstY = yVertices[1]
-                local lastX = xVertices[vertexCount]
-                local lastY = yVertices[vertexCount]
-
-                local lineVertexXCoordinates = vertexXCoordinates[line]
-                local lineVertexYCoordinates = vertexYCoordinates[line]
-
-                lastDrawnY = firstY
-                minY, maxY = vertex(firstX, firstY, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
-
-                local nextDrawX = xPerPixelWidth
-                local floor_expectedVerticesPerScreenX = math_pow(2, math_floor(math_max(0, math_log(vertexCount * pixelWidthInverse) * oneOverLogOf2)))
-
-                if floor_expectedVerticesPerScreenX < 16 then -- From manual testing, this is where the binary search becomes faster
-                    -- Linear search
-                    for i = 2, vertexCount do
-                        if xVertices[i] >= nextDrawX then
-                            if generatePixel then
-                                minY, maxY = vertex(xVertices[i], yVertices[i - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
-                            end
-                            minY, maxY = vertex(xVertices[i], yVertices[i], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
-                            nextDrawX = nextDrawX + xPerPixelWidth
-                        end
+                if not line.hidden then
+                    vertexCounts[line] = 0
+                    if not vertexXCoordinates[line] then
+                        vertexXCoordinates[line] = {}
+                        vertexYCoordinates[line] = {}
                     end
-                else
-                    -- Binary search
-                    local lowerBound = 1
-                    local upperBound
-                    local oneAboveLowerBound = lowerBound + 1
-                    
-                    local i = 1 + floor_expectedVerticesPerScreenX
-                    local shift = floor_expectedVerticesPerScreenX
-                   
-                    while i < vertexCount do
-                        local x = xVertices[i] or lastX
-                        if upperBound == oneAboveLowerBound then
-                            if generatePixel then
-                                minY, maxY = vertex(xVertices[upperBound], yVertices[upperBound - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+
+                    local vertices = line.vertices
+                    local xVertices = vertices.x
+                    local yVertices = vertices.y
+                    local vertexCount = #xVertices
+                    local firstX = xVertices[1]
+                    local firstY = yVertices[1]
+                    local lastX = xVertices[vertexCount]
+                    local lastY = yVertices[vertexCount]
+
+                    local lineVertexXCoordinates = vertexXCoordinates[line]
+                    local lineVertexYCoordinates = vertexYCoordinates[line]
+
+                    lastDrawnY = firstY
+                    minY, maxY = vertex(firstX, firstY, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+
+                    local nextDrawX = xPerPixelWidth
+                    local floor_expectedVerticesPerScreenX = math_pow(2, math_floor(math_max(0, math_log(vertexCount * pixelWidthInverse) * oneOverLogOf2)))
+
+                    if floor_expectedVerticesPerScreenX < 16 then -- From manual testing, this is where the binary search becomes faster
+                        -- Linear search
+                        for i = 2, vertexCount do
+                            if xVertices[i] >= nextDrawX then
+                                if generatePixel then
+                                    minY, maxY = vertex(xVertices[i], yVertices[i - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                                end
+                                minY, maxY = vertex(xVertices[i], yVertices[i], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                                nextDrawX = nextDrawX + xPerPixelWidth
                             end
-                            minY, maxY = vertex(xVertices[upperBound], yVertices[upperBound], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
-                            shift = floor_expectedVerticesPerScreenX
-                            lowerBound = upperBound
-                            oneAboveLowerBound = lowerBound + 1
-                            i = upperBound + floor_expectedVerticesPerScreenX
-                            upperBound = nil
-                            nextDrawX = nextDrawX + xPerPixelWidth
-                        elseif x < nextDrawX then
-                            lowerBound = i
-                            oneAboveLowerBound = lowerBound + 1
-                            if upperBound then
+                        end
+                    else
+                        -- Binary search
+                        local lowerBound = 1
+                        local upperBound
+                        local oneAboveLowerBound = lowerBound + 1
+                        
+                        local i = 1 + floor_expectedVerticesPerScreenX
+                        local shift = floor_expectedVerticesPerScreenX
+                    
+                        while i < vertexCount do
+                            local x = xVertices[i] or lastX
+                            if upperBound == oneAboveLowerBound then
+                                if generatePixel then
+                                    minY, maxY = vertex(xVertices[upperBound], yVertices[upperBound - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                                end
+                                minY, maxY = vertex(xVertices[upperBound], yVertices[upperBound], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                                shift = floor_expectedVerticesPerScreenX
+                                lowerBound = upperBound
+                                oneAboveLowerBound = lowerBound + 1
+                                i = upperBound + floor_expectedVerticesPerScreenX
+                                upperBound = nil
+                                nextDrawX = nextDrawX + xPerPixelWidth
+                            elseif x < nextDrawX then
+                                lowerBound = i
+                                oneAboveLowerBound = lowerBound + 1
+                                if upperBound then
+                                    shift = shift * 0.5
+                                    i = lowerBound + shift
+                                else
+                                    i = i + floor_expectedVerticesPerScreenX
+                                end
+                            elseif x > nextDrawX then
+                                upperBound = i
                                 shift = shift * 0.5
                                 i = lowerBound + shift
-                            else
+                            elseif x == nextDrawX then
+                                if generatePixel then
+                                    minY, maxY = vertex(x, yVertices[i - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                                end
+                                minY, maxY = vertex(x, yVertices[i], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                                lowerBound = i
+                                oneAboveLowerBound = lowerBound + 1
+                                upperBound = nil
                                 i = i + floor_expectedVerticesPerScreenX
+                                nextDrawX = nextDrawX + xPerPixelWidth
+                                shift = floor_expectedVerticesPerScreenX
                             end
-                        elseif x > nextDrawX then
-                            upperBound = i
-                            shift = shift * 0.5
-                            i = lowerBound + shift
-                        elseif x == nextDrawX then
-                            if generatePixel then
-                                minY, maxY = vertex(x, yVertices[i - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
-                            end
-                            minY, maxY = vertex(x, yVertices[i], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
-                            lowerBound = i
-                            oneAboveLowerBound = lowerBound + 1
-                            upperBound = nil
-                            i = i + floor_expectedVerticesPerScreenX
-                            nextDrawX = nextDrawX + xPerPixelWidth
-                            shift = floor_expectedVerticesPerScreenX
                         end
                     end
-                end
 
-                minY, maxY = vertex(lastX, lastY, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
-                if generatePixel then
-                    minY, maxY = vertex(maxX, lastY, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
-                end
+                    minY, maxY = vertex(lastX, lastY, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                    if generatePixel then
+                        minY, maxY = vertex(maxX, lastY, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                    end
 
-                for i = vertexCounts[line] + 1, #lineVertexXCoordinates do
-                    lineVertexXCoordinates[i] = nil
-                    lineVertexYCoordinates[i] = nil
+                    for i = vertexCounts[line] + 1, #lineVertexXCoordinates do
+                        lineVertexXCoordinates[i] = nil
+                        lineVertexYCoordinates[i] = nil
+                    end
                 end
             end
 
