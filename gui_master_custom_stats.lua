@@ -1060,7 +1060,7 @@ local function UIGraphContainer(graph)
                     local stack = MasterFramework:HorizontalStack(
                         {
                             checkbox,
-                            line.newTitle and MasterFramework:Text(line.newTitle, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3))
+                            line.title and MasterFramework:Text(line.title, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3))
                         },
                         MasterFramework:AutoScalingDimension(8),
                         0.5
