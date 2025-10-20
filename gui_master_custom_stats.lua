@@ -170,7 +170,7 @@ local GL_LINES = GL.LINES
 local categories
 local graphData
 
-local selectedGraphTitle
+local graphGrid
 
 local composedGraphsDir = "LuaUI/Custom Stats/Composed Graphs"
 
@@ -190,6 +190,7 @@ function widget:SetConfigData(data)
     config = data or {}
 
     if type(config.selectedGraphTitle) ~= "string" then config.selectedGraphTitle = nil end
+    if type(config.selectedGraphTitles) ~= "table" then config.selectedGraphTitles = {} end
 end
 
 function widget:GetConfigData()
@@ -417,9 +418,8 @@ local function UIGraph(data)
 
     local lastDrawnY
 
-    function graph:Select(anchor, limit, graphXOffset)
-        graphXOffset = graphXOffset or 0
-        local _, graphYOffset = self:RegisteredDrawingGroup():AbsolutePosition()
+    function graph:Select(anchor, limit)
+        local graphXOffset, graphYOffset = self:RegisteredDrawingGroup():AbsolutePosition()
 
         if selectionAnchor ~= anchor or selectionLimit ~= limit then
             selectionAnchor = anchor
@@ -901,8 +901,9 @@ local function UIGraph(data)
     return graph
 end
 
-local function UIGraphContainer()
-    local graph = demoGraph
+local function UIGraphContainer(graph)
+    local title
+    graph = graph or demoGraph
     local uiGraph = UIGraph(graph)
 
     local graphLinesMenu = HorizontalWrap({}, MasterFramework:AutoScalingDimension(8), MasterFramework:AutoScalingDimension(2), 0.5, 0.5)
@@ -923,7 +924,7 @@ local function UIGraphContainer()
                     if success and (type(result) == "number") then
                         data._rawGenerator = compositionLogicField.text:GetRawString()
                         data.generator = errorOrGenerator
-                        SaveComposedGraph(config.selectedGraphTitle, data)
+                        SaveComposedGraph(title, data)
                     else
                         Spring.Echo(result)
                     end
@@ -945,7 +946,7 @@ local function UIGraphContainer()
                             return
                         end
                         data.dependencyNames = result
-                        SaveComposedGraph(config.selectedGraphTitle, data)
+                        SaveComposedGraph(title, data)
                         Refresh()
                     end
                 else
@@ -958,13 +959,14 @@ local function UIGraphContainer()
     -- TODO: Check for uses
     local wrappedGraphLinesMenu = MasterFramework:MarginAroundRect(
         graphLinesMenu, 
-        MasterFramework:AutoScalingDimension(20),
-        MasterFramework:AutoScalingDimension(20),
-        MasterFramework:AutoScalingDimension(20),
-        MasterFramework:AutoScalingDimension(20)
+        MasterFramework:AutoScalingDimension(8),
+        MasterFramework:AutoScalingDimension(4),
+        MasterFramework:AutoScalingDimension(8),
+        MasterFramework:AutoScalingDimension(4)
     )
 
-    local graphContainer = MasterFramework:VerticalHungryStack(
+    local graphContainer
+    graphContainer = MasterFramework:VerticalHungryStack(
         MasterFramework:HorizontalStack({
                 graphTitle,
                 logarithmicCheckBox, MasterFramework:Text("Logarithmic"),
@@ -980,8 +982,7 @@ local function UIGraphContainer()
                     MasterFramework:DrawingGroup(uiGraph, true),
                     function(responder, x, y, button)
                         local baseX, _ = responder:CachedPositionTranslatedToGlobalContext()
-                        uiGraph:Select(x - baseX, nil, baseX)
-                        -- uiGraph:Select(x - baseX)
+                        graphContainer:Select(graphContainer, x - baseX)
                         return true
                     end,
                     function(responder, x, y, dx, dy, button)
@@ -989,7 +990,7 @@ local function UIGraphContainer()
                         if button == 1 then
                             local baseX, _ = responder:CachedPositionTranslatedToGlobalContext()
                             local selectionAnchor, _ = uiGraph:GetSelection()
-                            uiGraph:Select(selectionAnchor, math.max(math.min(x - baseX, responderWidth), 0), baseX)
+                            graphContainer:Select(graphContainer, selectionAnchor, math.max(math.min(x - baseX, responderWidth), 0))
                         end
                     end,
                     function(responder, x, y, button) end
@@ -998,14 +999,14 @@ local function UIGraphContainer()
                     local _, selectionLimit = uiGraph:GetSelection()
                     if not selectionLimit then
                         local baseX, _ = responder:CachedPositionTranslatedToGlobalContext()
-                        uiGraph:Select(x - baseX, nil, baseX)
+                        graphContainer:Select(graphContainer, x - baseX)
                     end
                 end,
                 function() end,
                 function()
                     local _, selectionLimit = uiGraph:GetSelection()
                     if not selectionLimit then
-                        uiGraph:Select()
+                        graphContainer:Select(graphContainer)
                     end
                 end
             ),
@@ -1016,11 +1017,23 @@ local function UIGraphContainer()
         0.5
     )
 
-    function graphContainer:SetData(newGraph, title)
+    function graphContainer:Select(caller, anchor, limit)
+        if caller == graphContainer then
+            for index, otherGraphContainer in ipairs(graphGrid:GetMembers()) do
+                if otherGraphContainer ~= self then
+                    otherGraphContainer:Select(self, anchor, limit)
+                end
+            end
+        end
+        uiGraph:Select(anchor, limit)
+    end
+
+    function graphContainer:SetData(newGraph, newTitle)
         if newGraph ~= graph then
             graph = newGraph
+            title = newTitle
             uiGraph:SetData(graph)
-            graphTitle:SetString(title)
+            graphTitle:SetString(newTitle)
 
             logarithmicCheckBox:SetChecked(graph.showAsLogarithmic)
             deltaCheckBox:SetChecked(graph.showAsDelta)
@@ -1047,7 +1060,7 @@ local function UIGraphContainer()
                     local stack = MasterFramework:HorizontalStack(
                         {
                             checkbox,
-                            line.title and MasterFramework:Text(line.title, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3))
+                            line.newTitle and MasterFramework:Text(line.newTitle, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3))
                         },
                         MasterFramework:AutoScalingDimension(8),
                         0.5
@@ -1080,7 +1093,6 @@ end
 -- UI Element Var Declarations
 ------------------------------------------------------------------------------------------------------------
 
-local uiGraphContainer
 local menu
 local uiCategories = {}
 
@@ -1119,13 +1131,27 @@ local function UISectionedButtonList(name, options, action)
     return buttonList
 end
 
-local function DisplayGraphMatchingName(graphName)
-    config.selectedGraphTitle = graphName
-    if graphData[graphName] then
-        uiGraphContainer:SetData(graphData[graphName], graphName .. ":")
-    else
-        uiGraphContainer:SetData(demoGraph, "Select Graph")
+local function DisplayGraphMatchingNames(graphNames)
+    config.selectedGraphTitles = graphNames
+
+    local graphContainers = graphGrid:GetMembers()
+    for i = 1, #graphNames do
+        local graphContainer = graphContainers[i] or UIGraphContainer()
+        local graphName = graphNames[i]
+
+        if graphData[graphName] then
+            graphContainer:SetData(graphData[graphName], graphName .. ":")
+        else
+            graphContainer:SetData(demoGraph, "Select Graph")
+        end
+
+        graphContainers[i] = graphContainer
     end
+    for i = #graphNames + 1, #graphContainers do
+        graphContainers[i] = nil
+    end
+
+    graphGrid:SetMembers(graphContainers)
 end
 
 ------------------------------------------------------------------------------------------------------------
@@ -1191,7 +1217,13 @@ local function Refresh()
         return {
             name = key,
             list = UISectionedButtonList(key, graphNames, function(_, graphName)
-                DisplayGraphMatchingName(graphName)
+                local _, ctrl = Spring.GetModKeyState()
+                if ctrl then
+                    table.insert(config.selectedGraphTitles, graphName)
+                    DisplayGraphMatchingNames(config.selectedGraphTitles)
+                else
+                    DisplayGraphMatchingNames({ graphName })
+                end
             end)
         }
     end)
@@ -1234,7 +1266,12 @@ local function Refresh()
     end))
 
     if config.selectedGraphTitle then
-        DisplayGraphMatchingName(config.selectedGraphTitle)
+        -- Migration
+        DisplayGraphMatchingNames({ config.selectedGraphTitle })
+        config.selectedGraphTitle = nil
+    end
+    if config.selectedGraphTitles then
+        DisplayGraphMatchingNames(config.selectedGraphTitles)
     end
 
     refreshRequested = nil
@@ -1255,6 +1292,98 @@ WG.MasterStats = {}
 function WG.MasterStats:Refresh()
     refreshRequested = true
 end
+
+local function Grid(initialMembers)
+    local grid = MasterFramework:Component(false, true)
+    local members = {}
+
+	function grid:GetMembers()
+		local membersCopy = {}
+		for i = 1, #members do 
+			membersCopy[i] = members[i]
+		end
+		return members
+	end
+
+	function grid:SetMembers(newMembers)
+		self:NeedsLayout()
+		for i = #newMembers + 1, #members do
+			members[i] = nil
+		end
+		for i = 1, #newMembers do
+			members[i] = newMembers[i]
+		end
+	end
+    
+    grid:SetMembers(initialMembers)
+
+    local sqrt
+    local xCount
+    local yCount
+    local cachedWidth
+    local cachedHeight
+
+    function grid:Layout(availableWidth, availableHeight)
+        self:RegisterDrawingGroup()
+        if #members < 1 then return availableWidth, availableHeight end
+
+        sqrt = math.sqrt(#members)
+        xCount = math.ceil(sqrt)
+        --[[
+            sqrt(x^2 - x) < sqrt(x^2) - 0.5
+            x^2 - x < x^2 - sqrt(x^2) + 0.25
+            x - 0.25 < sqrt(x^2)
+            x^2 - 0.5x + 0.0625 < x^2
+            -0.5x + 0.0625 < 0
+            0.0625 < 0.5x
+            0.125 < x
+        ]]
+        --[[
+            sqrt(x^2 - x) >= sqrt(x^2) - 1
+                  x^2 - x >= x^2 - 2sqrt(x^2) + 1
+
+                   -x - 1 >= 2sqrt(x^2)
+               -x/2 - 1/2 >= sqrt(x^2)
+     (x^2)/4 + 2x/4 + 1/4 >= x^2
+    (-3x^2)/4 + x/2 + 1/4 >= 0
+           -3x^2 + 2x + 1 >= 0
+            3x^2 - 2x - 1 <= 0
+         x^2 - 2x/3 - 1/3 <= 0
+         (x - 1/3)(x + 1) <= 0
+        ]]
+        -- This is valid while as #members >= 1
+        yCount = math.round(sqrt)
+        
+        cachedMemberWidth = availableWidth / xCount
+        cachedMemberHeight = availableHeight / yCount
+
+        for xIndex = 1, xCount do
+            for yIndex = 1, yCount do
+                local index = (yIndex - 1) * xCount + xIndex
+                if index > #members then break end
+                local member = members[(yIndex - 1) * xCount + xIndex]
+                member:Layout(math.floor(cachedMemberWidth), math.floor(cachedMemberHeight))
+            end
+        end
+        return availableWidth, availableHeight
+    end
+
+    function grid:Position(x, y)
+        if #members < 1 then return end
+        for xIndex = 1, xCount do
+            for yIndex = 1, yCount do
+                local index = (yIndex - 1) * xCount + xIndex
+                if index > #members then break end
+                members[index]:Position(
+                    x + math.ceil(cachedMemberWidth) * (xIndex - 1),
+                    y + math.ceil(cachedMemberHeight) * (yCount - yIndex)
+                )
+            end
+        end
+    end
+
+    return grid
+end 
     
 function widget:Initialize()
     MasterFramework = WG["MasterFramework " .. requiredFrameworkVersion]
@@ -1295,9 +1424,8 @@ function widget:Initialize()
         MasterFramework:AutoScalingDimension(8),
         0
     )
+    graphGrid = Grid({ UIGraphContainer() })
     
-    uiGraphContainer = UIGraphContainer()
-
     local split = MasterFramework:HorizontalStack(
         {
             MasterFramework:VerticalHungryStack(
@@ -1327,7 +1455,7 @@ function widget:Initialize()
                 ),
                 0
             ),
-            uiGraphContainer
+            graphGrid
         },
         MasterFramework:AutoScalingDimension(8),
         1
