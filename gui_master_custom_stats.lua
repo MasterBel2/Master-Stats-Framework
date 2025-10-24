@@ -535,9 +535,20 @@ local function UIGraph(data)
 
     local function vertex(x, y, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
         if data.showAsDelta then
-            local _lastDrawnY = y
-            y = y - lastDrawnY
-            lastDrawnY = _lastDrawnY
+            if cachedWidth >= #data.lines[1].vertices.x then
+                local _lastDrawnY = y
+                y = y - lastDrawnY
+                lastDrawnY = _lastDrawnY
+            else
+                local lastDrawnX = lineVertexXCoordinates[vertexCounts[line]] or 0
+                local xChange = x - lastDrawnX
+
+                if xChange == 0 then y = 0 else
+                    local _lastDrawnY = y
+                    y = (y - lastDrawnY) / xChange * 30
+                    lastDrawnY = _lastDrawnY
+                end
+            end
         end
         if data.showAsLogarithmic then
             if y >= 1 then
@@ -588,8 +599,8 @@ local function UIGraph(data)
                 if firstXUnit ~= xUnit then
                     error("graphMetadata: Dependency has mismatched x unit!")
                 end
-                minX = math.max(minX, _minX)
-                maxX = math.min(maxX, _maxX)
+                minX = math_max(minX, _minX)
+                maxX = math_min(maxX, _maxX)
             end
 
             for lineIndex = 1, firstLineCount do
@@ -643,8 +654,8 @@ local function UIGraph(data)
                     xCoordinates[vertexCount] = x
                     yCoordinates[vertexCount] = y
                     
-                    minY = math.min(minY, y)
-                    maxY = math.max(maxY, y)
+                    minY = math_min(minY, y)
+                    maxY = math_max(maxY, y)
                 end
                 vertexCounts[line] = vertexCount
 
