@@ -452,19 +452,37 @@ local function UIGraph(data)
                             if line.hidden then
                                 member:SetMembers(emptyTable)
                             else
+                                local xScale = #vertexYCoordinates[line] / cachedWidth
+
+                                local lineVertexYCoordinates = vertexYCoordinates[line]
+                                scaledAnchor = math.round(scaledAnchor * xScale)
+
                                 member:SetMembers(x)
-                                local i = 1
-                                while line.vertices.x[i] and scaledAnchor > line.vertices.x[i] do
-                                    i = i + 1
+
+                                local _string
+                                if lineVertexYCoordinates[scaledAnchor] then
+                                    _string = lineVertexYCoordinates[scaledAnchor]
+                                    if data.showAsLogarithmic then
+                                        _string = math.exp(_string)
+                                    end
+                                    _string = format(_string, data.yUnit)
+                                else
+                                    _string = "???"
                                 end
-                                local _string = (line.vertices.y[i - 1] and format(line.vertices.y[i - 1], data.yUnit) or "???")
 
                                 if scaledLimit then
-                                    i = 1
-                                    while line.vertices.x[i] and scaledLimit > line.vertices.x[i] do
-                                        i = i + 1
+                                    scaledLimit = math.round(scaledLimit * xScale)
+                                    
+                                    local limitString
+                                    if lineVertexYCoordinates[scaledLimit] then
+                                        limitString = lineVertexYCoordinates[scaledLimit]
+                                        if data.showAsLogarithmic then
+                                            limitString = math.exp(limitString)
+                                        end
+                                        limitString = format(limitString, data.yUnit)
+                                    else
+                                        limitString = "???"
                                     end
-                                    local limitString = (line.vertices.y[i - 1] and format(line.vertices.y[i - 1], data.yUnit) or "???")
 
                                     if scaledLimit < scaledAnchor then
                                         _string = limitString .. " - " .. _string
@@ -472,6 +490,7 @@ local function UIGraph(data)
                                         _string = _string .. " - " .. limitString
                                     end
                                 end
+
                                 valueText:SetString(_string)
                             end
 
@@ -482,7 +501,8 @@ local function UIGraph(data)
 
                     local xRange = MasterFramework:Text("")
                     function xRange:Update(scaledAnchor, scaledLimit)
-                        local _string = format(scaledAnchor, data.xUnit)
+                        local xScale = (maxX - minX) / cachedWidth
+                        local _string = format(scaledAnchor * xScale, data.xUnit)
 
                         if scaledLimit then
                             local limitString = format(scaledLimit, data.xUnit)
@@ -518,7 +538,7 @@ local function UIGraph(data)
 
                 local xScale = (maxX - minX) / cachedWidth
                 for _, member in ipairs(self.overlay.stackMembers) do
-                    pcall(member.Update, member, xScale * anchor, limit and (limit * xScale))
+                    pcall(member.Update, member, anchor, limit)
                 end
             else
                 if self.overlay then
