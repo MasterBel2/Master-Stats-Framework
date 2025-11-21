@@ -251,7 +251,9 @@ end
 -- Interface Structure
 ------------------------------------------------------------------------------------------------------------
 
-local function MatchWidth(target, body)
+local UI = {}
+
+function UI.MatchWidth(target, body)
     local matchWidth = {}
 
     function matchWidth:Layout(availableWidth, availableHeight)
@@ -267,7 +269,7 @@ local function MatchWidth(target, body)
     return matchWidth
 end
 
-local function MatchHeight(target, body)
+function UI.MatchHeight(target, body)
     local matchHeight = {}
 
     function matchHeight:Layout(availableWidth, availableHeight)
@@ -283,7 +285,7 @@ local function MatchHeight(target, body)
     return matchHeight
 end
 
-local function HorizontalWrap(items, horizontalSpacing, verticalSpacing, xAnchor, yAnchor)
+function UI.HorizontalWrap(items, horizontalSpacing, verticalSpacing, xAnchor, yAnchor)
     local wrap = { items = items }
     local rows
 
@@ -354,7 +356,7 @@ local function HorizontalWrap(items, horizontalSpacing, verticalSpacing, xAnchor
     return wrap
 end
 
-local function UIGraph(data)
+function UI.Graph(data)
 
     local graph = MasterFramework:Component(true, true)
 
@@ -944,12 +946,12 @@ local function UIGraph(data)
     return graph
 end
 
-local function UIGraphContainer(graph)
+function UI.GraphContainer(graph)
     local title
     graph = graph or demoGraph
-    local uiGraph = UIGraph(graph)
+    local uiGraph = UI.Graph(graph)
 
-    local graphLinesMenu = HorizontalWrap({}, MasterFramework:AutoScalingDimension(8), MasterFramework:AutoScalingDimension(2), 0.5, 0.5)
+    local graphLinesMenu = UI.HorizontalWrap({}, MasterFramework:AutoScalingDimension(8), MasterFramework:AutoScalingDimension(2), 0.5, 0.5)
 
     local logarithmicCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsLogarithmic(checked) end)
     local deltaCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsDelta(checked) end)
@@ -1143,7 +1145,7 @@ local currentOverlay
 
 local refreshRequested = true
 
-local function UISectionedButtonList(name, options, action)
+function UI.SectionedButtonList(name, options, action)
     local padding = MasterFramework:AutoScalingDimension(8)
 
     local newButtons = {}
@@ -1179,7 +1181,7 @@ local function DisplayGraphMatchingNames(graphNames)
 
     local graphContainers = graphGrid:GetMembers()
     for i = 1, #graphNames do
-        local graphContainer = graphContainers[i] or UIGraphContainer()
+        local graphContainer = graphContainers[i] or UI.GraphContainer()
         local graphName = graphNames[i]
 
         if graphData[graphName] then
@@ -1259,7 +1261,7 @@ local function Refresh()
 
         return {
             name = key,
-            list = UISectionedButtonList(key, graphNames, function(_, graphName)
+            list = UI.SectionedButtonList(key, graphNames, function(_, graphName)
                 local _, ctrl = Spring.GetModKeyState()
                 if ctrl then
                     table.insert(config.selectedGraphTitles, graphName)
@@ -1336,7 +1338,7 @@ function WG.MasterStats:Refresh()
     refreshRequested = true
 end
 
-local function Grid(initialMembers)
+function UI.Grid(initialMembers)
     local grid = MasterFramework:Component(false, true)
     local members = {}
 
@@ -1433,6 +1435,7 @@ function widget:Initialize()
     if not MasterFramework then
         error("[" .. widget:GetInfo().name .. "] MasterFramework " .. requiredFrameworkVersion .. " not found!")
     end
+    MasterFramework.EnableDebugMode(UI)
 
     for _, filename in ipairs(VFS.DirList(composedGraphsDir, nil, VFS.RAW)) do
         local success, _error = pcall(function()
@@ -1467,7 +1470,7 @@ function widget:Initialize()
         MasterFramework:AutoScalingDimension(8),
         0
     )
-    graphGrid = Grid({ UIGraphContainer() })
+    graphGrid = UI.Grid({ UI.GraphContainer() })
     
     local split = MasterFramework:HorizontalStack(
         {
