@@ -463,7 +463,11 @@ local function UIGraph(data)
                                 if lineVertexYCoordinates[scaledAnchor] then
                                     _string = lineVertexYCoordinates[scaledAnchor]
                                     if data.showAsLogarithmic then
-                                        _string = math.exp(_string)
+                                        if _string > 0 then
+                                            _string = math.exp(_string)
+                                        else
+                                            _string = -math.exp(-_string)
+                                        end
                                     end
                                     _string = format(_string, data.yUnit)
                                 else
@@ -477,7 +481,11 @@ local function UIGraph(data)
                                     if lineVertexYCoordinates[scaledLimit] then
                                         limitString = lineVertexYCoordinates[scaledLimit]
                                         if data.showAsLogarithmic then
-                                            limitString = math.exp(limitString)
+                                            if limitString > 0 then
+                                                limitString = math.exp(limitString)
+                                            else
+                                                limitString = -math.exp(-limitString)
+                                            end
                                         end
                                         limitString = format(limitString, data.yUnit)
                                     else
