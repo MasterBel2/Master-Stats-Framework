@@ -431,7 +431,7 @@ function UI.Graph(data)
             if anchor then
                 local overlayX
                 local overlayY = cachedY + cachedHeight
-                if selectionLimit and selectionLimit < selectionAnchor then
+                if selectionLimit and selectionLimit > selectionAnchor then
                     overlayX = cachedX + selectionLimit
                 else
                     overlayX = cachedX + selectionAnchor
@@ -515,7 +515,7 @@ function UI.Graph(data)
                         local _string = format(scaledAnchor * xScale, data.xUnit)
 
                         if scaledLimit then
-                            local limitString = format(scaledLimit, data.xUnit)
+                            local limitString = format(scaledLimit * xScale, data.xUnit)
 
                             if scaledLimit < scaledAnchor then
                                 _string = limitString .. " - " .. _string
@@ -546,7 +546,6 @@ function UI.Graph(data)
                     currentOverlay = self.overlay
                 end
 
-                local xScale = (maxX - minX) / cachedWidth
                 for _, member in ipairs(self.overlay.stackMembers) do
                     pcall(member.Update, member, anchor, limit)
                 end
