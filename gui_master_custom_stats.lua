@@ -958,8 +958,16 @@ function UI.GraphContainer(graph)
 
     local graphLinesMenu = UI.HorizontalWrap({}, MasterFramework:AutoScalingDimension(8), MasterFramework:AutoScalingDimension(2), 0.5, 0.5)
 
-    local logarithmicCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsLogarithmic(checked) end)
-    local deltaCheckBox = MasterFramework:CheckBox(12, function(_, checked) uiGraph:SetShowAsDelta(checked) end)
+    local logarithmicCheckBox = MasterFramework:Button(MasterFramework:Text("Logarithmic"), function(button)
+        local selected = not button:GetSelected()
+        uiGraph:SetShowAsLogarithmic(selected)
+        button:SetSelected(selected)
+    end)
+    local deltaCheckBox = MasterFramework:Button(MasterFramework:Text("Delta"),function(button)
+        local selected = not button:GetSelected()
+        uiGraph:SetShowAsDelta(selected)
+        button:SetSelected(selected)
+    end)
     local graphTitle = MasterFramework:Text("Demo Graph: ")
 
     local compositionLogicField = WG.LuaTextEntry(MasterFramework, "", "Enter Composition Logic Here", function()
@@ -1019,8 +1027,8 @@ function UI.GraphContainer(graph)
     graphContainer = MasterFramework:VerticalHungryStack(
         MasterFramework:HorizontalStack({
                 graphTitle,
-                logarithmicCheckBox, MasterFramework:Text("Logarithmic"),
-                deltaCheckBox, MasterFramework:Text("Delta")
+                logarithmicCheckBox,
+                deltaCheckBox
             },
             MasterFramework:AutoScalingDimension(8),
             0.5
@@ -1085,38 +1093,30 @@ function UI.GraphContainer(graph)
             uiGraph:SetData(graph)
             graphTitle:SetString(newTitle)
 
-            logarithmicCheckBox:SetChecked(graph.showAsLogarithmic)
-            deltaCheckBox:SetChecked(graph.showAsDelta)
+            logarithmicCheckBox:SetSelected(graph.showAsLogarithmic)
+            deltaCheckBox:SetSelected(graph.showAsDelta)
 
             if graph.lines then
                 graphLinesMenu.items = table.imap(graph.lines, function(index, line)
                     local color = MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)
-                    local checkbox = MasterFramework:CheckBox(12, function(_, checked) 
+                    local checkbox = MasterFramework:Button(line.title and MasterFramework:Text(line.title, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3)), function(button) 
                         local _, ctrl, _, _ = Spring.GetModKeyState()
                         if ctrl then
                             line.hidden = false
-                            graphLinesMenu.items[index].checkbox:SetChecked(not line.hidden)
+                            graphLinesMenu.items[index]:SetSelected(not line.hidden)
                             for otherIndex, otherLine in ipairs(graph.lines) do
                                 if otherLine ~= line then
                                     otherLine.hidden = true
-                                    graphLinesMenu.items[otherIndex].checkbox:SetChecked(not otherLine.hidden)
+                                    graphLinesMenu.items[otherIndex]:SetSelected(not otherLine.hidden)
                                 end
                             end
                         else
-                            line.hidden = not checked
+                            local selected = not button:GetSelected()
+                            line.hidden = selected
+                            button:SetSelected(selected)
                         end
                     end)
-                    checkbox:SetChecked(not line.hidden)
-                    local stack = MasterFramework:HorizontalStack(
-                        {
-                            checkbox,
-                            line.title and MasterFramework:Text(line.title, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3))
-                        },
-                        MasterFramework:AutoScalingDimension(8),
-                        0.5
-                    )
-                    stack.checkbox = checkbox
-                    return stack
+                    return checkbox
                 end)
             end
 
