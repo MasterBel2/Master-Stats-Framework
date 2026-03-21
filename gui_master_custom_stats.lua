@@ -699,11 +699,16 @@ function UI.Graph(data)
         else
             local minX = math_huge
             local maxX = -math_huge
-            for i = 1, #data.lines do
-                local line = data.lines[i]
-                if not line.hidden then
-                    minX = math_min(minX, line.vertices.x[1])
-                    maxX = math_max(maxX, line.vertices.x[#line.vertices.x])
+            if data.xUnit == "Frames" then
+                minX = 0
+                maxX = Spring.GetGameFrame()
+            else
+                for i = 1, #data.lines do
+                    local line = data.lines[i]
+                    if not line.hidden then
+                        minX = math_min(minX, line.vertices.x[1])
+                        maxX = math_max(maxX, line.vertices.x[#line.vertices.x])
+                    end
                 end
             end
 
