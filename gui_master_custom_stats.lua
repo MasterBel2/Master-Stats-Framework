@@ -1223,8 +1223,45 @@ function widget:MasterStatsCategories()
     }
 end
 
+function UI.CategoryMenu(categories, action)
+    local categoryMenu = MasterFramework:VerticalStack(
+        {},
+        MasterFramework:AutoScalingDimension(8),
+        0
+    )
+
+    function categoryMenu:SetData(categories)
+        local uiCategories = table.mapToArray(categories, function(key, value)
+            local graphNames = {}
+            for _, section in pairs(value.sections) do
+                for graphName, _ in pairs(section) do
+                    table.insert(graphNames, graphName)
+                end
+            end
+
+            table.sort(graphNames)
+
+            return {
+                name = key,
+                list = UI.SectionedButtonList(key, graphNames, action)
+            }
+        end)
+
+        table.sort(uiCategories, function(a, b) return a.name < b.name end)
+
+        self:SetMembers(table.imap(uiCategories, function(_, value)
+            return value.list
+        end))
+
+    end
+
+    categoryMenu:SetData(categories)
+    return categoryMenu
+end
+
 local function Refresh()
     categories = {}
+    graphData = {}
 
     for _, widget in pairs(widgetHandler.widgets) do
         if widget.MasterStatsCategories then
@@ -1235,6 +1272,7 @@ local function Refresh()
                 local section = {}
                 for graphName, graph in pairs(widgetCategory) do
                     section[graphName] = graph
+                    graphData[graphName] = graph
                 end
 
                 local existingCategory = categories[categoryName] or { sections = {} }
@@ -1244,34 +1282,6 @@ local function Refresh()
             end
         end
     end
-
-    graphData = {}
-    local uiCategories = table.mapToArray(categories, function(key, value)
-
-        local graphNames = {}
-
-        for _, section in pairs(value.sections) do
-            for graphName, _graphData in pairs(section) do
-                table.insert(graphNames, graphName)
-                graphData[graphName] = _graphData
-            end
-        end
-
-        table.sort(graphNames)
-
-        return {
-            name = key,
-            list = UI.SectionedButtonList(key, graphNames, function(_, graphName)
-                local _, ctrl = Spring.GetModKeyState()
-                if ctrl then
-                    table.insert(config.selectedGraphTitles, graphName)
-                    DisplayGraphMatchingNames(config.selectedGraphTitles)
-                else
-                    DisplayGraphMatchingNames({ graphName })
-                end
-            end)
-        }
-    end)
 
     for categoryKey, category in pairs(categories) do
         for sectionKey, section in pairs(category.sections) do
@@ -1304,11 +1314,7 @@ local function Refresh()
         end
     end
 
-    table.sort(uiCategories, function(a, b) return a.name < b.name end)
-
-    menu:SetMembers(table.imap(uiCategories, function(_, value)
-        return value.list
-    end))
+    menu:SetData(categories)
 
     if config.selectedGraphTitle then
         -- Migration
@@ -1465,11 +1471,16 @@ function widget:Initialize()
     table = MasterFramework.table
     reduce = table.reduce
 
-    menu = MasterFramework:VerticalStack(
-        {},
-        MasterFramework:AutoScalingDimension(8),
-        0
-    )
+    menu = UI.CategoryMenu({}, function(_, graphName)
+        local _, ctrl = Spring.GetModKeyState()
+        if ctrl then
+            table.insert(config.selectedGraphTitles, graphName)
+            DisplayGraphMatchingNames(config.selectedGraphTitles)
+        else
+            DisplayGraphMatchingNames({ graphName })
+        end
+    end)
+
     graphGrid = UI.Grid({ UI.GraphContainer() })
     
     local split = MasterFramework:HorizontalStack(
@@ -1477,27 +1488,90 @@ function widget:Initialize()
             MasterFramework:VerticalHungryStack(
                 MasterFramework:Rect(MasterFramework:AutoScalingDimension(0), MasterFramework:AutoScalingDimension(0)),
                 MasterFramework:VerticalScrollContainer(menu),
-                MasterFramework:Button(
-                    MasterFramework:Text("+"),
-                    function()
-                        local baseGraphTitle = "New Composed Graph"
-                        local graphTitle = baseGraphTitle
-                        local counter = 0
+                MasterFramework:HorizontalStack(
+                    {
+                        MasterFramework:Button(
+                            MasterFramework:Text("+"),
+                            function()
+                                local baseGraphTitle = "New Composed Graph"
+                                local graphTitle = baseGraphTitle
+                                local counter = 0
+        
+                                while customComposedGraphs[graphTitle] do
+                                    counter = counter + 1
+                                    graphTitle = baseGraphTitle .. " " .. counter
+                                end
+                                customComposedGraphs[graphTitle] = {
+                                    _customComposedGraph = true,
+                                    yUnit = "",
+                                    _rawGenerator = "",
+                                    generator = returnFirstDependency,
+                                    dependencyNames = {}
+                                }
+        
+                                Refresh()
+                            end
+                        ),
+                        MasterFramework:Button(
+                            MasterFramework:Text("Compare"),
+                            function()
+                                local dialog1
 
-                        while customComposedGraphs[graphTitle] do
-                            counter = counter + 1
-                            graphTitle = baseGraphTitle .. " " .. counter
-                        end
-                        customComposedGraphs[graphTitle] = {
-                            _customComposedGraph = true,
-                            yUnit = "",
-                            _rawGenerator = "",
-                            generator = returnFirstDependency,
-                            dependencyNames = {}
-                        }
-
-                        Refresh()
-                    end
+                                local demoList = VFS.DirList("demos", "*.sdfz.cache")
+                                table.sort(demoList, function(d1, d2)
+                                    return d1 > d2
+                                end)
+                                demoList = table.ifilter(demoList, function(_, demoCacheFileName)
+                                    local dir = LUAUI_DIRNAME .. "Config/MasterBel2-Stats/" .. demoCacheFileName:sub(7, demoCacheFileName:len() - 11) .. "/"
+                                    return #VFS.SubDirs(dir) > 0
+                                end)
+                                local buttons = {}
+                                for i = 1, math.min(20, #demoList) do
+                                    local metadata = Json.decode(VFS.LoadFile(demoList[i]))
+                                    local noteFileName = demoList[i]:sub(1, demoList[i]:len() - 5) .. "note"
+                                    buttons[i] = MasterFramework:Button(
+                                        MasterFramework:VerticalStack({
+                                            MasterFramework:Text(demoList[i]:sub(7, demoList[i]:len() - 11)),
+                                            MasterFramework:Text(metadata.map .. " (" .. #metadata.players .. ")"),
+                                            VFS.FileExists(noteFileName) and MasterFramework:Text(VFS.LoadFile(noteFileName)) or nil,
+                                        }, MasterFramework:AutoScalingDimension(0), 0),
+                                        function()
+                                            local graphData = {}
+                                            local dir = LUAUI_DIRNAME .. "Config/MasterBel2-Stats/" .. demoList[i]:sub(7, demoList[i]:len() - 11) .. "/"
+                                            local categories = table.imapToTable(VFS.SubDirs(dir), function(_, categoryPath)
+                                                local categoryName = categoryPath:sub(dir:len() + 1, categoryPath:len())
+                                                return categoryName, { sections = { ["All Graphs"] = table.imapToTable(VFS.DirList(dir .. categoryName), function(_, graphFileName)
+                                                    local graphName = graphFileName:sub(categoryPath:len() + 1, graphFileName:len() - 4)
+                                                    local graph = Json.decode(VFS.LoadFile(graphFileName) or "") or demoGraph
+                                                    graphData[graphName] = graph
+                                                    if graph == demoGraph then Spring.Echo("Warning: Could not load graph at " .. graphFileName) end
+                                                    return graphName, graph
+                                                end) }}
+                                            end)
+                                            MasterFramework:Dialog(
+                                                "Select Graph",
+                                                { UI.CategoryMenu(categories, function(_, graphName)
+                                                    local graphContainer = UI.GraphContainer()
+                                                    graphContainer:SetData(graphData[graphName], graphName .. " (Compare)")
+                                                    local graphContainers = graphGrid:GetMembers()
+                                                    table.insert(graphContainers, graphContainer)
+                                                    graphGrid:SetMembers(graphContainers)
+                                                end) },
+                                                {{ name = "Close", color = MasterFramework:Color(1, 1, 1, 0.7), action = function() end }}
+                                            ):PresentAbove(dialog1:GetKey())
+                                        end
+                                    )
+                                end
+                                dialog1 = MasterFramework:Dialog("Recent Games",
+                                    buttons,
+                                    {{ name = "Close", color = MasterFramework:Color(1, 1, 1, 0.7), action = function() end }}
+                                )
+                                dialog1:PresentAbove(key)
+                            end
+                        ),
+                    },
+                    MasterFramework:AutoScalingDimension(8),
+                    0
                 ),
                 0
             ),
@@ -1538,59 +1612,63 @@ end
 
 local function writeTableToFile(fileName, _table)
     local file = io.open(fileName, "w")
-    file:write("return " .. table.toString(_table))
+    file:write(Json.encode(_table))
     file:close()
 end
 
 function widget:Shutdown()
-    local baseDir = LUAUI_DIRNAME .. "Config/MasterBel2-Stats/" .. Spring.GetGameRulesParam("GameID") .. "/"
-    for categoryName, category in pairs(categories) do
-        local dir = baseDir .. categoryName .. "/"
-        for graphName, graph in pairs(category) do
-            local fileName = dir .. graphName .. ".lua"
-            local fileGraph
-
-            if VFS.FileExists(fileName) then
-                fileGraph = VFS.Include(fileName, nil, VFS.RAW)
-                for lineIndex, line in ipairs(graph.lines) do -- merge the two graphs. This will be necessary e.g. in case a partial replay was watched, or specfullview was used in a watch-through.
-                    fileLine = fileGraph.lines[lineIndex] or line
-                    local newYVertices = {}
-                    local newXVertices = {}
-                    local newIndex = 1
-                    local i = 1
-                    local j = 1
-                    while i <= #fileLine.vertices.x and j <= #line.vertices.x do
-                        if fileLine.vertices.x[i] == line.vertices.x[j] then
-                            newXVertices[newIndex] = fileLine.vertices.x[i]
-                            newYVertices[newIndex] = fileLine.vertices.y[i]
-                            newIndex = newIndex + 1
-                            i = i + 1
-                            j = j + 1
-                        elseif fileLine.vertices.x[i] > line.vertices.x[j] then
-                            newXVertices[newIndex] = line.vertices.x[j]
-                            newYVertices[newIndex] = line.vertices.y[j]
-                            j = j + 1
-                            newIndex = newIndex + 1
-                        else -- fileLine.vertices.x[i] < line.vertices.x[i]
-                            newXVertices[newIndex] = fileLine.vertices.x[i]
-                            newYVertices[newIndex] = fileLine.vertices.y[i]
-                            i = i + 1
-                            newIndex = newIndex + 1
-                        end
-                    end
-                    fileGraph.lines[lineIndex] = fileLine
-                end
-            else
-                fileGraph = { xUnit = graph.xUnit, yUnit = graph.yUnit, lines = graph.lines }
-            end
-            Spring.CreateDir(dir)
-            writeTableToFile(fileName, fileGraph)
-        end
-    end
-
     if currentOverlay then
         MasterFramework:RemoveElement(currentOverlay.key)
     end
     MasterFramework:RemoveElement(key)
     WG.MasterStats = nil
+
+    local demoFileName = WG.GetDemoFileName()
+    if not demoFileName then Spring.Echo("Could not save graphs: no demo file name!"); return end
+    local baseDir = LUAUI_DIRNAME .. "Config/MasterBel2-Stats/" .. demoFileName:sub(1, demoFileName:len() - 5) .. "/"
+    for categoryName, category in pairs(categories) do
+        local dir = baseDir .. categoryName .. "/"
+        for sectionName, section in pairs(category.sections) do
+            for graphName, graph in pairs(section) do
+                local fileName = dir .. graphName .. ".lua"
+                local fileGraph
+
+                if VFS.FileExists(fileName) then
+                    fileGraph = Json.decode(VFS.LoadFile(fileName, nil, VFS.RAW))
+                    for lineIndex, line in ipairs(graph.lines) do -- merge the two graphs. This will be necessary e.g. in case a partial replay was watched, or specfullview was used in a watch-through.
+                        fileLine = fileGraph.lines[lineIndex] or line
+                        local newYVertices = {}
+                        local newXVertices = {}
+                        local newIndex = 1
+                        local i = 1
+                        local j = 1
+                        while i <= #fileLine.vertices.x and j <= #line.vertices.x do
+                            if fileLine.vertices.x[i] == line.vertices.x[j] then
+                                newXVertices[newIndex] = fileLine.vertices.x[i]
+                                newYVertices[newIndex] = fileLine.vertices.y[i]
+                                newIndex = newIndex + 1
+                                i = i + 1
+                                j = j + 1
+                            elseif fileLine.vertices.x[i] > line.vertices.x[j] then
+                                newXVertices[newIndex] = line.vertices.x[j]
+                                newYVertices[newIndex] = line.vertices.y[j]
+                                j = j + 1
+                                newIndex = newIndex + 1
+                            else -- fileLine.vertices.x[i] < line.vertices.x[i]
+                                newXVertices[newIndex] = fileLine.vertices.x[i]
+                                newYVertices[newIndex] = fileLine.vertices.y[i]
+                                i = i + 1
+                                newIndex = newIndex + 1
+                            end
+                        end
+                        fileGraph.lines[lineIndex] = fileLine
+                    end
+                else
+                    fileGraph = { xUnit = graph.xUnit, yUnit = graph.yUnit, lines = graph.lines }
+                end
+                Spring.CreateDir(dir)
+                writeTableToFile(fileName, fileGraph)
+            end
+        end
+    end
 end
