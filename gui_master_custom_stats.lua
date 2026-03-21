@@ -1534,6 +1534,7 @@ function widget:Initialize()
                                 for i = 1, math.min(20, #demoList) do
                                     local metadata = Json.decode(VFS.LoadFile(demoList[i]))
                                     local noteFileName = demoList[i]:sub(1, demoList[i]:len() - 5) .. "note"
+                                    local graphNameToPath = {}
                                     buttons[i] = MasterFramework:Button(
                                         MasterFramework:VerticalStack({
                                             MasterFramework:Text(demoList[i]:sub(7, demoList[i]:len() - 11)),
@@ -1547,15 +1548,17 @@ function widget:Initialize()
                                                 local categoryName = categoryPath:sub(dir:len() + 1, categoryPath:len())
                                                 return categoryName, { sections = { ["All Graphs"] = table.imapToTable(VFS.DirList(dir .. categoryName), function(_, graphFileName)
                                                     local graphName = graphFileName:sub(categoryPath:len() + 1, graphFileName:len() - 4)
-                                                    local graph = Json.decode(VFS.LoadFile(graphFileName) or "") or demoGraph
-                                                    graphData[graphName] = graph
-                                                    if graph == demoGraph then Spring.Echo("Warning: Could not load graph at " .. graphFileName) end
-                                                    return graphName, graph
+                                                    graphNameToPath[graphName] = graphFileName
+                                                    return graphName, true
                                                 end) }}
                                             end)
                                             MasterFramework:Dialog(
                                                 "Select Graph",
                                                 { UI.CategoryMenu(categories, function(_, graphName)
+                                                    local graph = Json.decode(VFS.LoadFile(graphNameToPath[graphName]) or "") or demoGraph
+                                                    if graph == demoGraph then Spring.Echo("Warning: Could not load graph at " .. graphFileName) end
+                                                    graphData[graphName] = graph
+
                                                     local graphContainer = UI.GraphContainer()
                                                     graphContainer:SetData(graphData[graphName], graphName .. " (Compare)")
                                                     local graphContainers = graphGrid:GetMembers()
