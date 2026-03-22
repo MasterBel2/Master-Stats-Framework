@@ -1333,6 +1333,67 @@ local function Refresh()
 end
 
 ------------------------------------------------------------------------------------------------------------
+-- Save Graphs
+------------------------------------------------------------------------------------------------------------
+
+local function writeTableToFile(fileName, _table)
+    local file = io.open(fileName, "w")
+    file:write(Json.encode(_table))
+    file:close()
+end
+
+local function SaveDemos()
+    local demoFileName = WG.GetDemoFileName()
+    if not demoFileName then Spring.Echo("Could not save graphs: no demo file name!"); return end
+    local baseDir = LUAUI_DIRNAME .. "Config/MasterBel2-Stats/" .. demoFileName:sub(1, demoFileName:len() - 5) .. "/"
+    for categoryName, category in pairs(categories) do
+        local dir = baseDir .. categoryName .. "/"
+        for sectionName, section in pairs(category.sections) do
+            for graphName, graph in pairs(section) do
+                local fileName = dir .. graphName .. ".lua"
+                local fileGraph
+
+                if VFS.FileExists(fileName) then
+                    fileGraph = Json.decode(VFS.LoadFile(fileName, nil, VFS.RAW))
+                    for lineIndex, line in ipairs(graph.lines) do -- merge the two graphs. This will be necessary e.g. in case a partial replay was watched, or specfullview was used in a watch-through.
+                        fileLine = fileGraph.lines[lineIndex] or line
+                        local newYVertices = {}
+                        local newXVertices = {}
+                        local newIndex = 1
+                        local i = 1
+                        local j = 1
+                        while i <= #fileLine.vertices.x and j <= #line.vertices.x do
+                            if fileLine.vertices.x[i] == line.vertices.x[j] then
+                                newXVertices[newIndex] = fileLine.vertices.x[i]
+                                newYVertices[newIndex] = fileLine.vertices.y[i]
+                                newIndex = newIndex + 1
+                                i = i + 1
+                                j = j + 1
+                            elseif fileLine.vertices.x[i] > line.vertices.x[j] then
+                                newXVertices[newIndex] = line.vertices.x[j]
+                                newYVertices[newIndex] = line.vertices.y[j]
+                                j = j + 1
+                                newIndex = newIndex + 1
+                            else -- fileLine.vertices.x[i] < line.vertices.x[i]
+                                newXVertices[newIndex] = fileLine.vertices.x[i]
+                                newYVertices[newIndex] = fileLine.vertices.y[i]
+                                i = i + 1
+                                newIndex = newIndex + 1
+                            end
+                        end
+                        fileGraph.lines[lineIndex] = fileLine
+                    end
+                else
+                    fileGraph = { xUnit = graph.xUnit, yUnit = graph.yUnit, lines = graph.lines }
+                end
+                Spring.CreateDir(dir)
+                writeTableToFile(fileName, fileGraph)
+            end
+        end
+    end
+end
+
+------------------------------------------------------------------------------------------------------------
 -- Create / Destroy
 ------------------------------------------------------------------------------------------------------------
 
@@ -1576,6 +1637,17 @@ function widget:Initialize()
                                 dialog1:PresentAbove(key)
                             end
                         ),
+                        MasterFramework:Button(
+                            MasterFramework:Text("Save Graphs"),
+                            function()
+                                MasterFramework:ConfirmationDialog(
+                                    "Saving graphs takes some time.\nAre you sure?",
+                                    "Yes, Save",
+                                    MasterFramework:Color(1, 1, 0.3, 1),
+                                    SaveDemos
+                                ):PresentAbove(key)
+                            end
+                        )
                     },
                     MasterFramework:AutoScalingDimension(8),
                     0
@@ -1617,65 +1689,10 @@ function widget:Initialize()
     )
 end
 
-local function writeTableToFile(fileName, _table)
-    local file = io.open(fileName, "w")
-    file:write(Json.encode(_table))
-    file:close()
-end
-
 function widget:Shutdown()
     if currentOverlay then
         MasterFramework:RemoveElement(currentOverlay.key)
     end
     MasterFramework:RemoveElement(key)
     WG.MasterStats = nil
-
-    local demoFileName = WG.GetDemoFileName()
-    if not demoFileName then Spring.Echo("Could not save graphs: no demo file name!"); return end
-    local baseDir = LUAUI_DIRNAME .. "Config/MasterBel2-Stats/" .. demoFileName:sub(1, demoFileName:len() - 5) .. "/"
-    for categoryName, category in pairs(categories) do
-        local dir = baseDir .. categoryName .. "/"
-        for sectionName, section in pairs(category.sections) do
-            for graphName, graph in pairs(section) do
-                local fileName = dir .. graphName .. ".lua"
-                local fileGraph
-
-                if VFS.FileExists(fileName) then
-                    fileGraph = Json.decode(VFS.LoadFile(fileName, nil, VFS.RAW))
-                    for lineIndex, line in ipairs(graph.lines) do -- merge the two graphs. This will be necessary e.g. in case a partial replay was watched, or specfullview was used in a watch-through.
-                        fileLine = fileGraph.lines[lineIndex] or line
-                        local newYVertices = {}
-                        local newXVertices = {}
-                        local newIndex = 1
-                        local i = 1
-                        local j = 1
-                        while i <= #fileLine.vertices.x and j <= #line.vertices.x do
-                            if fileLine.vertices.x[i] == line.vertices.x[j] then
-                                newXVertices[newIndex] = fileLine.vertices.x[i]
-                                newYVertices[newIndex] = fileLine.vertices.y[i]
-                                newIndex = newIndex + 1
-                                i = i + 1
-                                j = j + 1
-                            elseif fileLine.vertices.x[i] > line.vertices.x[j] then
-                                newXVertices[newIndex] = line.vertices.x[j]
-                                newYVertices[newIndex] = line.vertices.y[j]
-                                j = j + 1
-                                newIndex = newIndex + 1
-                            else -- fileLine.vertices.x[i] < line.vertices.x[i]
-                                newXVertices[newIndex] = fileLine.vertices.x[i]
-                                newYVertices[newIndex] = fileLine.vertices.y[i]
-                                i = i + 1
-                                newIndex = newIndex + 1
-                            end
-                        end
-                        fileGraph.lines[lineIndex] = fileLine
-                    end
-                else
-                    fileGraph = { xUnit = graph.xUnit, yUnit = graph.yUnit, lines = graph.lines }
-                end
-                Spring.CreateDir(dir)
-                writeTableToFile(fileName, fileGraph)
-            end
-        end
-    end
 end
