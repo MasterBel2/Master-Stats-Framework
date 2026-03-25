@@ -728,13 +728,43 @@ function UI.Graph(data)
                     local xVertices = vertices.x
                     local yVertices = vertices.y
                     local vertexCount = #xVertices
-                    local firstX = xVertices[1]
-                    local firstY = yVertices[1]
-                    local lastX = xVertices[vertexCount]
-                    local lastY = yVertices[vertexCount]
 
                     local lineVertexXCoordinates = vertexXCoordinates[line]
                     local lineVertexYCoordinates = vertexYCoordinates[line]
+
+                    --
+                    -- Bound drawing to minX, maxX
+
+                    local lowerBound = 1
+                    local upperBound = vertexCount
+
+                    while xVertices[lowerBound] < minX and lowerBound < upperBound do
+                        lowerBound = lowerBound + 1
+                    end
+                    while xVertices[upperBound] > maxX and lowerBound < upperBound do
+                        upperBound = upperBound - 1
+                    end
+
+                    local beforeLowerBound = math.max(1, lowerBound - 1)
+                    local dx = xVertices[lowerBound] - xVertices[beforeLowerBound]
+                    local scale = dx == 0 and 0 or ((xVertices[lowerBound] - minX) / dx)
+                    local dyScaled = scale * (yVertices[lowerBound] - yVertices[beforeLowerBound])
+
+                    local firstX = minX
+                    local firstY = yVertices[lowerBound] - dyScaled
+
+                    local afterUpperBound = math.min(vertexCount, upperBound + 1)
+                    dx = xVertices[afterUpperBound] - xVertices[upperBound]
+                    scale = dx == 0 and 0 or ((maxX - xVertices[upperBound]) / dx)
+                    dyScaled = scale * (yVertices[afterUpperBound] - yVertices[upperBound])
+
+                    local lastX = maxX
+                    local lastY = yVertices[upperBound] + dyScaled
+                    if lastY > 5 then
+                        Spring.Echo(dx, maxX, xVertices[upperBound])
+                        Spring.Echo(yVertices[upperBound], upperBound, dyScaled, scale, yVertices[afterUpperBound])
+                        error()
+                    end
 
                     lastDrawnY = firstY
                     minY, maxY = vertex(firstX, firstY, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
@@ -742,9 +772,10 @@ function UI.Graph(data)
                     local nextDrawX = xPerPixelWidth
                     local floor_expectedVerticesPerScreenX = math_pow(2, math_floor(math_max(0, math_log(vertexCount * pixelWidthInverse) * oneOverLogOf2)))
 
+                    -- if true then
                     if floor_expectedVerticesPerScreenX < 16 then -- From manual testing, this is where the binary search becomes faster
                         -- Linear search
-                        for i = 2, vertexCount do
+                        for i = lowerBound + 1, upperBound do
                             if xVertices[i] >= nextDrawX then
                                 if generatePixel then
                                     minY, maxY = vertex(xVertices[i], yVertices[i - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
@@ -755,37 +786,36 @@ function UI.Graph(data)
                         end
                     else
                         -- Binary search
-                        local lowerBound = 1
-                        local upperBound
+                        local subsetUpperBound
                         local oneAboveLowerBound = lowerBound + 1
                         
                         local i = 1 + floor_expectedVerticesPerScreenX
                         local shift = floor_expectedVerticesPerScreenX
                     
-                        while i < vertexCount do
+                        while i < upperBound do
                             local x = xVertices[i] or lastX
-                            if upperBound == oneAboveLowerBound then
+                            if subsetUpperBound == oneAboveLowerBound then
                                 if generatePixel then
-                                    minY, maxY = vertex(xVertices[upperBound], yVertices[upperBound - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                                    minY, maxY = vertex(xVertices[subsetUpperBound], yVertices[subsetUpperBound - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
                                 end
-                                minY, maxY = vertex(xVertices[upperBound], yVertices[upperBound], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
+                                minY, maxY = vertex(xVertices[subsetUpperBound], yVertices[subsetUpperBound], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
                                 shift = floor_expectedVerticesPerScreenX
-                                lowerBound = upperBound
+                                lowerBound = subsetUpperBound
                                 oneAboveLowerBound = lowerBound + 1
-                                i = upperBound + floor_expectedVerticesPerScreenX
-                                upperBound = nil
+                                i = subsetUpperBound + floor_expectedVerticesPerScreenX
+                                subsetUpperBound = nil
                                 nextDrawX = nextDrawX + xPerPixelWidth
                             elseif x < nextDrawX then
                                 lowerBound = i
                                 oneAboveLowerBound = lowerBound + 1
-                                if upperBound then
+                                if subsetUpperBound then
                                     shift = shift * 0.5
                                     i = lowerBound + shift
                                 else
                                     i = i + floor_expectedVerticesPerScreenX
                                 end
                             elseif x > nextDrawX then
-                                upperBound = i
+                                subsetUpperBound = i
                                 shift = shift * 0.5
                                 i = lowerBound + shift
                             elseif x == nextDrawX then
@@ -795,7 +825,7 @@ function UI.Graph(data)
                                 minY, maxY = vertex(x, yVertices[i], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
                                 lowerBound = i
                                 oneAboveLowerBound = lowerBound + 1
-                                upperBound = nil
+                                subsetUpperBound = nil
                                 i = i + floor_expectedVerticesPerScreenX
                                 nextDrawX = nextDrawX + xPerPixelWidth
                                 shift = floor_expectedVerticesPerScreenX
