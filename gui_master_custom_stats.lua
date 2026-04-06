@@ -362,32 +362,6 @@ function UI.Graph(data)
 
     local graph = MasterFramework:Component(true, true)
 
-    -- local xOffset = 0
-    -- local yOffset = 0
-    -- local xScale = 1
-    -- local yScale = 1
-
-    -- function graph:GetScales()
-    --     return xScale, yScale
-    -- end
-    -- function graph:SetScales(newXScale, newYScale)
-    --     if xScale ~= newXScale or yScale ~= newYScale then
-    --         xScale = newXScale
-    --         yScale = newYScale
-    --         self:NeedsLayout()
-    --     end
-    -- end
-    -- function graph:GetOffsets()
-    --     return xOffset, yOffset
-    -- end
-    -- function graph:SetOffsets(newXOffset, newYOffset)
-    --     if xOffset ~= newXOffset or yOffset ~= newYOffset then
-    --         xOffset = newXOffset
-    --         yOffset = newYOffset
-    --         self:NeedsLayout()
-    --     end
-    -- end
-
     function graph:SetData(newData)
         data = newData
     end
