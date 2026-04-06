@@ -1,6 +1,6 @@
 function widget:GetInfo()
     return {
-        name = "Stats (MasterBel2 Edition)",
+        name = "MasterBel2's Custom Stats",
         description = "Provides information on custom statistics",
         author = "MasterBel2",
         version = 0,
