@@ -412,13 +412,50 @@ function UI.Graph(data)
     local vertexXCoordinates = {}
     local vertexYCoordinates = {}
     
-    local minX, maxX, minY, maxY
+    local minX, maxX, minY, maxY, firstX, lastX
+    local overrideMinX = 0
+    local overrideMaxX = math.huge
 
     local cachedX, cachedX
     local cachedWidth, cachedHeight
     local verticalRatio
 
     local lastDrawnY
+
+    function graph:Zoom(factor)
+        local wantedDisplacement = (lastX - firstX) * factor
+        local wantedSize = (lastX - firstX) * (1 + factor)
+
+        -- apply wantedSize twice after initial shift, to try to enforce the new size against both bounds.
+        overrideMaxX = math.min(maxX, lastX + wantedDisplacement)
+        overrideMinX = math.max(minX, firstX - wantedSize)
+        overrideMaxX = math.min(maxX, overrideMinX + wantedSize)
+
+        
+        -- setting maxX to math.huge allows auto-resizing of the graph.
+        -- minX should not change so we don't have to apply this logic to that.
+        if overrideMaxX >= maxX - 0.0001 then
+            overrideMaxX = math.huge
+        end
+
+    end
+    function graph:Pan(factor)
+        local currentViewRegion = lastX - firstX
+        local scrollDisplacement = currentViewRegion / (MasterFramework.viewportHeight / MasterFramework.dimension.scrollMultiplier())
+        
+        factor = factor * scrollDisplacement
+        if lastX + factor >= maxX then
+            factor = math.min(factor, maxX - math.min(maxX, overrideMaxX))
+        elseif overrideMinX + factor <= minX then
+            factor = math.max(factor, minX - overrideMinX)
+        end
+        overrideMaxX = lastX + factor
+        overrideMinX = firstX + factor
+
+        if overrideMaxX >= maxX - 0.0001 then
+            overrideMaxX = math.huge
+        end
+    end
 
     function graph:Select(anchor, limit)
         local graphXOffset, graphYOffset = self:RegisteredDrawingGroup():AbsolutePosition()
@@ -454,10 +491,17 @@ function UI.Graph(data)
                             if line.hidden then
                                 member:SetMembers(emptyTable)
                             else
+                                -- Vertices per pixel; currently 2 for an arbitrary graph we tested with.
+                                -- Likely this is expected with discrete graphs, and not for non-discrete graphs?
                                 local xScale = #vertexYCoordinates[line] / cachedWidth
+                                
+                                local pixelsPerGraphX = cachedWidth / (lastX - firstX)
+                                local firstXPixelOffset = firstX * pixelsPerGraphX
+                                local firstXVertexOffset = firstXPixelOffset / xScale
+                                firstXVertexOffset = 0
 
                                 local lineVertexYCoordinates = vertexYCoordinates[line]
-                                scaledAnchor = math.round(scaledAnchor * xScale)
+                                scaledAnchor = math.round(scaledAnchor * xScale + firstXVertexOffset)
 
                                 member:SetMembers(x)
 
@@ -477,7 +521,7 @@ function UI.Graph(data)
                                 end
 
                                 if scaledLimit then
-                                    scaledLimit = math.round(scaledLimit * xScale)
+                                    scaledLimit = math.round(scaledLimit * xScale + firstXVertexOffset)
                                     
                                     local limitString
                                     if lineVertexYCoordinates[scaledLimit] then
@@ -511,11 +555,17 @@ function UI.Graph(data)
 
                     local xRange = MasterFramework:Text("")
                     function xRange:Update(scaledAnchor, scaledLimit)
-                        local xScale = (maxX - minX) / cachedWidth
-                        local _string = format(scaledAnchor * xScale, data.xUnit)
+                        local pixelsPerGraphX = cachedWidth / (lastX - firstX)
+                        local xScale = (lastX - firstX) / cachedWidth
+                        local lineVertexYCoordinates = vertexYCoordinates[line]
+                        
+                        local firstXPixelOffset = firstX * pixelsPerGraphX
+                        local firstXVertexOffset = firstXPixelOffset * xScale
+
+                        local _string = format(scaledAnchor * xScale + firstXVertexOffset, data.xUnit)
 
                         if scaledLimit then
-                            local limitString = format(scaledLimit * xScale, data.xUnit)
+                            local limitString = format(scaledLimit * xScale + firstXVertexOffset, data.xUnit)
 
                             if scaledLimit < scaledAnchor then
                                 _string = limitString .. " - " .. _string
@@ -613,15 +663,18 @@ function UI.Graph(data)
     local function graphMetadata(data, pixelWidth)
         local minY = math.huge
         local maxY = -math.huge
+        local firstX, lastX
 
         if data.dependencies then
             if #data.dependencies == 0 or not data.generator then
-                return 0, "", 0, 0, 0, 0
+                return 0, "", 0, 0, 0, 0, 0, 0
             end
             -- if not data.xUnit then error("graphMetadata: no xUnit on non-dependent graph!") end
-            local firstLineCount, firstXUnit, minX, maxX = graphMetadata(data.dependencies[1], pixelWidth)
+            local firstLineCount, firstXUnit, minX, maxX, _, _, firstX, lastX = graphMetadata(data.dependencies[1], pixelWidth)
+
             for i = 2, #data.dependencies do
-                local lineCount, xUnit, _minX, _maxX = graphMetadata(data.dependencies[i], pixelWidth)
+                local lineCount, xUnit, _minX, _maxX, _, _, _firstX, _lastX = graphMetadata(data.dependencies[i], pixelWidth)
+                
                 if lineCount ~= firstLineCount then
                     error("graphMetadata: Dependency has mismatched line count!")
                 end
@@ -630,6 +683,8 @@ function UI.Graph(data)
                 end
                 minX = math_max(minX, _minX)
                 maxX = math_min(maxX, _maxX)
+                firstX = math_max(firstX, _firstX)
+                lastX = math_min(lastX, _lastX)
             end
 
             for lineIndex = 1, firstLineCount do
@@ -656,7 +711,7 @@ function UI.Graph(data)
                 local vertexCount = 0
                 local dependencyCount = #data.dependencies
                 for graphX = 0, pixelWidth do
-                    local x = graphX / pixelWidth * (maxX - minX)
+                    local x = graphX / pixelWidth * (lastX - firstX) + firstX
                     for i = 1, dependencyCount do
                         local dependencyLine = data.dependencies[i].lines[lineIndex]
                         local dependencyXCoordinates = vertexXCoordinates[dependencyLine]
@@ -694,7 +749,7 @@ function UI.Graph(data)
                 end
             end
 
-            return firstLineCount, firstXUnit, minX, maxX, minY, maxY
+            return firstLineCount, firstXUnit, minX, maxX, minY, maxY, firstX, lastX
         else
             local minX = math_huge
             local maxX = -math_huge
@@ -711,8 +766,11 @@ function UI.Graph(data)
                 end
             end
 
+            local firstX = math_max(overrideMinX, minX)
+            local lastX = math_min(maxX, overrideMaxX)
+
             local generatePixel = data.discrete and not data.showAsDelta
-            local xPerPixelWidth = (maxX - minX) / pixelWidth
+            local xPerPixelWidth = (lastX - firstX) / pixelWidth
             local pixelWidthInverse = 1 / pixelWidth
 
             for i = 1, #data.lines do
@@ -733,38 +791,31 @@ function UI.Graph(data)
                     local lineVertexYCoordinates = vertexYCoordinates[line]
 
                     --
-                    -- Bound drawing to minX, maxX
+                    -- Bound drawing to firstX, lastX
 
                     local lowerBound = 1
                     local upperBound = vertexCount
 
-                    while xVertices[lowerBound] < minX and lowerBound < upperBound do
+                    while xVertices[lowerBound] < firstX and lowerBound < upperBound do
                         lowerBound = lowerBound + 1
                     end
-                    while xVertices[upperBound] > maxX and lowerBound < upperBound do
+                    while xVertices[upperBound] > lastX and lowerBound <= upperBound do
                         upperBound = upperBound - 1
                     end
 
                     local beforeLowerBound = math.max(1, lowerBound - 1)
                     local dx = xVertices[lowerBound] - xVertices[beforeLowerBound]
-                    local scale = dx == 0 and 0 or ((xVertices[lowerBound] - minX) / dx)
+                    local scale = dx == 0 and 0 or ((xVertices[lowerBound] - firstX) / dx)
                     local dyScaled = scale * (yVertices[lowerBound] - yVertices[beforeLowerBound])
 
-                    local firstX = minX
-                    local firstY = yVertices[lowerBound] - dyScaled
+                    local firstY = data.discrete and yVertices[lowerBound] or (yVertices[lowerBound] - dyScaled)
 
                     local afterUpperBound = math.min(vertexCount, upperBound + 1)
                     dx = xVertices[afterUpperBound] - xVertices[upperBound]
-                    scale = dx == 0 and 0 or ((maxX - xVertices[upperBound]) / dx)
+                    scale = dx == 0 and 0 or ((lastX - xVertices[upperBound]) / dx)
                     dyScaled = scale * (yVertices[afterUpperBound] - yVertices[upperBound])
 
-                    local lastX = maxX
-                    local lastY = yVertices[upperBound] + dyScaled
-                    if lastY > 5 then
-                        Spring.Echo(dx, maxX, xVertices[upperBound])
-                        Spring.Echo(yVertices[upperBound], upperBound, dyScaled, scale, yVertices[afterUpperBound])
-                        error()
-                    end
+                    local lastY = data.discrete and yVertices[upperBound] or (yVertices[upperBound] + dyScaled)
 
                     lastDrawnY = firstY
                     minY, maxY = vertex(firstX, firstY, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
@@ -772,10 +823,9 @@ function UI.Graph(data)
                     local nextDrawX = xPerPixelWidth
                     local floor_expectedVerticesPerScreenX = math_pow(2, math_floor(math_max(0, math_log(vertexCount * pixelWidthInverse) * oneOverLogOf2)))
 
-                    -- if true then
-                    if floor_expectedVerticesPerScreenX < 16 then -- From manual testing, this is where the binary search becomes faster
-                        -- Linear search
-                        for i = lowerBound + 1, upperBound do
+                    if floor_expectedVerticesPerScreenX < 16 then -- From manual testing, this is where the binary search becomes faster    
+                    -- Linear search
+                        for i = lowerBound, upperBound do
                             if xVertices[i] >= nextDrawX then
                                 if generatePixel then
                                     minY, maxY = vertex(xVertices[i], yVertices[i - 1], line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
@@ -834,9 +884,6 @@ function UI.Graph(data)
                     end
 
                     minY, maxY = vertex(lastX, lastY, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
-                    if generatePixel then
-                        minY, maxY = vertex(maxX, lastY, line, minY, maxY, lineVertexXCoordinates, lineVertexYCoordinates)
-                    end
 
                     for i = vertexCounts[line] + 1, #lineVertexXCoordinates do
                         lineVertexXCoordinates[i] = nil
@@ -845,7 +892,7 @@ function UI.Graph(data)
                 end
             end
 
-            return #data.lines, data.xUnit, minX, maxX, minY, maxY
+            return #data.lines, data.xUnit, minX, maxX, minY, maxY, firstX, lastX
         end
     end
     graph.metadata = graphMetadata
@@ -853,23 +900,27 @@ function UI.Graph(data)
     function graph:Layout(availableWidth, availableHeight)
         self:RegisterDrawingGroup()
         self:NeedsLayout()
+
+        cachedWidth = availableWidth
+        cachedHeight = availableHeight
         
-        local success, _, _, _minX, _maxX, _minY, _maxY = pcall(graphMetadata, data, availableWidth)
+        local success, _, _, _minX, _maxX, _minY, _maxY, _firstX, _lastX = pcall(graphMetadata, data, availableWidth)
         if success then
             minX = _minX
             maxX = _maxX
             minY = _minY
             maxY = _maxY
+            firstX = _firstX
+            lastX = _lastX
         else
             minX = 0
             maxX = 1
             minY = 0
             maxY = 1
+            firstX = 0
+            lastX = 1
         end
         verticalRatio = (maxY - minY) / availableHeight
-
-        cachedWidth = availableWidth
-        cachedHeight = availableHeight
 
         if minY < 0 and maxY > 0 then
             zeroText:Layout(availableWidth, font:ScaledSize())
@@ -877,12 +928,12 @@ function UI.Graph(data)
 
         if data.showAsLogarithmic then
             topText:SetString(format(math.exp(maxY), data.yUnit))
-            bottomText:SetString(format(minX, data.xUnit) .. ", " .. format(-math.exp(-minY), data.yUnit))
+            bottomText:SetString(format(firstX, data.xUnit) .. ", " .. format(-math.exp(-minY), data.yUnit))
         else
             topText:SetString(format(maxY, data.yUnit))
-            bottomText:SetString(format(minX, data.xUnit) .. ", " .. format(minY, data.yUnit))
+            bottomText:SetString(format(firstX, data.xUnit) .. ", " .. format(minY, data.yUnit))
         end
-        bottomRightText:SetString(format(maxX, data.xUnit))
+        bottomRightText:SetString(format(lastX, data.xUnit))
         
         topText:Layout(availableWidth, font:ScaledSize())
         bottomText:Layout(availableWidth, font:ScaledSize())
@@ -958,11 +1009,11 @@ function UI.Graph(data)
 
         gl_BeginEnd(GL_LINES, DrawGraphHorizontalLines)
         
-        if minX ~= maxX and minY ~= maxY then
+        if firstX ~= lastX and minY ~= maxY then
             gl_PushMatrix()
 
-            gl_Scale(cachedWidth / (maxX - minX), cachedHeight / (maxY - minY), 1)
-            gl_Translate(0, -minY, 0)
+            gl_Scale(cachedWidth / (lastX - firstX), cachedHeight / (maxY - minY), 1)
+            gl_Translate(-firstX, -minY, 0)
 
             for _, line in ipairs(data.lines) do
                 if not line.hidden then
@@ -1066,7 +1117,18 @@ function UI.GraphContainer(graph)
             MasterFramework:MouseOverResponder(
                 MasterFramework:MousePressResponder(
                     -- MasterFramework:DrawingGroup(uiGraph, true),
-                    MasterFramework:DrawingGroup(uiGraph, true),
+                    MasterFramework:Responder(
+                        MasterFramework:DrawingGroup(uiGraph, true),
+                        MasterFramework.events.mouseWheel,
+                        function(responder, _, _, up, value)
+                            local _, ctrl, _, shift = Spring.GetModKeyState()
+                            if ctrl then
+                                uiGraph:Zoom((shift and 0.5 or 0.1) * (up and -1 or 1))
+                            else
+                                uiGraph:Pan((shift and 3 or 1) * (up and -1 or 1))
+                            end
+                        end
+                    ),
                     function(responder, x, y, button)
                         local baseX, _ = responder:CachedPositionTranslatedToGlobalContext()
                         graphContainer:Select(graphContainer, x - baseX)
