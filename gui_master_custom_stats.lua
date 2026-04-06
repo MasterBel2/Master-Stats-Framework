@@ -149,6 +149,8 @@ local reduce
 
 local string_format = string.format
 
+local Spring_GetGameFrame = Spring.GetGameFrame
+
 local gl_BeginEnd = gl.BeginEnd
 local gl_Color = gl.Color
 local gl_LineWidth = gl.LineWidth
@@ -631,9 +633,9 @@ function UI.Graph(data)
         end
         if data.showAsLogarithmic then
             if y >= 1 then
-                y = math_max(0, math_log(y))
+                y = math_log(y)
             elseif y <= -1 then
-                y = -math_max(0, math_log(-y))
+                y = -math_log(-y)
             else
                 y = 0
             end
@@ -720,8 +722,10 @@ function UI.Graph(data)
                         while dependencyXCoordinates[dependencyNextXIndex[i]] and (dependencyXCoordinates[dependencyNextXIndex[i]] < x) do
                             dependencyNextXIndex[i] = dependencyNextXIndex[i] + 1
                         end
-                        -- if true then
-                        if data.dependencies[i].discrete or not dependencyXCoordinates[dependencyNextXIndex[i] - 1] or not dependencyXCoordinates[dependencyNextXIndex[i]] then
+
+                        if data.dependencies[i].discrete 
+                        or not dependencyXCoordinates[dependencyNextXIndex[i] - 1] 
+                        or not dependencyXCoordinates[dependencyNextXIndex[i]] then
                             dependencyYValues[i] = dependencyYCoordinates[dependencyNextXIndex[i]] or dependencyYValues[i]
                         else
                             local previousY = dependencyYCoordinates[dependencyNextXIndex[i] - 1] or dependencyYValues[i]
@@ -755,7 +759,7 @@ function UI.Graph(data)
             local maxX = -math_huge
             if data.xUnit == "Frames" then
                 minX = 0
-                maxX = Spring.GetGameFrame()
+                maxX = Spring_GetGameFrame()
             else
                 for i = 1, #data.lines do
                     local line = data.lines[i]
