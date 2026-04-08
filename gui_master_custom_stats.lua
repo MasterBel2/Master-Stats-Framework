@@ -3,7 +3,7 @@ function widget:GetInfo()
         name = "MasterBel2's Custom Stats",
         description = "Provides information on custom statistics",
         author = "MasterBel2",
-        version = 0,
+        version = "2026-04",
         date = "March 2022",
         license = "GNU GPL, v2 or later",
         layer = math.huge,
@@ -131,7 +131,7 @@ local demoGraph = {
 ------------------------------------------------------------------------------------------------------------
 
 local MasterFramework
-local requiredFrameworkVersion = "Dev"
+local requiredFrameworkVersion = 44
 local key
 
 local math_max = math.max
