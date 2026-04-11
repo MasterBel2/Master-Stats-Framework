@@ -3,7 +3,7 @@ function widget:GetInfo()
         name = "MasterBel2's Custom Stats",
         description = "Provides information on custom statistics",
         author = "MasterBel2",
-        version = "2026-04-rev1",
+        version = "2026-04-rev2",
         date = "March 2022",
         license = "GNU GPL, v2 or later",
         layer = math.huge,
@@ -1183,7 +1183,7 @@ function UI.GraphContainer(graph)
                             else
                                 local selected = not button:GetSelected()
                                 line.hidden = selected
-                                button:SetSelected(selected)
+                                button:SetSelected(not selected)
                             end
                         end
                     )
