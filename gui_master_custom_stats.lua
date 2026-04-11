@@ -1168,23 +1168,26 @@ function UI.GraphContainer(graph)
             if graph.lines then
                 graphLinesMenu.items = table.imap(graph.lines, function(index, line)
                     local color = MasterFramework:Color(line.color.r, line.color.g, line.color.b, line.color.a)
-                    local checkbox = MasterFramework:Button(line.title and MasterFramework:Text(line.title, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3)), function(button) 
-                        local _, ctrl, _, _ = Spring.GetModKeyState()
-                        if ctrl then
-                            line.hidden = false
-                            graphLinesMenu.items[index]:SetSelected(not line.hidden)
-                            for otherIndex, otherLine in ipairs(graph.lines) do
-                                if otherLine ~= line then
-                                    otherLine.hidden = true
-                                    graphLinesMenu.items[otherIndex]:SetSelected(not otherLine.hidden)
+                    local checkbox = MasterFramework:Button(line.title and MasterFramework:Text(line.title, color) or MasterFramework:Background(MasterFramework:Rect(MasterFramework:AutoScalingDimension(20), MasterFramework:AutoScalingDimension(12)), { color }, MasterFramework:AutoScalingDimension(3)), 
+                        function(button) 
+                            local _, ctrl, _, _ = Spring.GetModKeyState()
+                            if ctrl then
+                                line.hidden = false
+                                graphLinesMenu.items[index]:SetSelected(not line.hidden)
+                                for otherIndex, otherLine in ipairs(graph.lines) do
+                                    if otherLine ~= line then
+                                        otherLine.hidden = true
+                                        graphLinesMenu.items[otherIndex]:SetSelected(not otherLine.hidden)
+                                    end
                                 end
+                            else
+                                local selected = not button:GetSelected()
+                                line.hidden = selected
+                                button:SetSelected(selected)
                             end
-                        else
-                            local selected = not button:GetSelected()
-                            line.hidden = selected
-                            button:SetSelected(selected)
                         end
-                    end)
+                    )
+                    checkbox:SetSelected(not line.hidden)
                     return checkbox
                 end)
             end
