@@ -8,6 +8,7 @@ function widget:GetInfo()
         " - widget:UnitRepair(unitID, repairerID, healthRestored)\n" ..
         " - widget:FeatureReclaim(featureID, reclaimerID, metalGenerated, energyGenerated)",
         handler = true,
+        version   = "2026-04-rev1",
         author    = "MasterBel2",
         license   = "GNU GPL, v2"
     }

@@ -2,7 +2,8 @@ function widget:GetInfo()
     return {
         name = "Statistics Collection: Resource-Scaled Damage",
         author    = "MasterBel2",
-        license   = "GNU GPL, v2"
+        license   = "GNU GPL, v2",
+        version   = "2026-04",
     }
 end
 

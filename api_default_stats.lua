@@ -2,6 +2,7 @@ function widget:GetInfo()
     return {
         name = "Statistics Collection: Default Stats",
         author    = "MasterBel2",
+        version   = "2026-04",
         license   = "GNU GPL, v2"
     }
 end

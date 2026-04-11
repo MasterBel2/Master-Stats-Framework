@@ -5,6 +5,7 @@ function widget:GetInfo()
         author    = "MasterBel2",
         date      = "January 2023",
         license   = "GNU GPL, v2",
+        version   = "2026-04",
         enabled   = true, --enabled by default
 	}
 end

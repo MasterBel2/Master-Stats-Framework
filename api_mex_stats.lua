@@ -4,6 +4,7 @@ function widget:GetInfo()
         desc = "Records stats for metal extraction, including extraction lost due to e-stall.\n" ..
                "E-stall stats may be inaccurate when mexes fire or cloak during e-stall.",
         author    = "MasterBel2",
+        version   = "2026-04",
         license   = "GNU GPL, v2"
     }
 end

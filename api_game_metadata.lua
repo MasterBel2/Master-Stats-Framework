@@ -3,6 +3,7 @@ function widget:GetInfo()
         name = "Demo Metadata",
         author = "MasterBel2",
         date = "March 2026",
+        version   = "2026-04-rev1",
         license = "GNU GPL, v2"
     }
 end

@@ -4,6 +4,7 @@ function widget:GetInfo()
     	desc      = "Records APM statistics for MasterBel2's Custom Stats",
     	author    = "MasterBel2",
     	date      = "January 2023",
+        version   = "2026-04",
     	license   = "GNU GPL, v2"
 	}
 end

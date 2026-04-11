@@ -3,7 +3,7 @@ function widget:GetInfo()
         name = "MasterBel2's Custom Stats",
         description = "Provides information on custom statistics",
         author = "MasterBel2",
-        version = "2026-04",
+        version = "2026-04-rev1",
         date = "March 2022",
         license = "GNU GPL, v2 or later",
         layer = math.huge,

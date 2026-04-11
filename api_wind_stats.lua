@@ -2,6 +2,7 @@ function widget:GetInfo()
 	return {
 	name      = "Statistics Collection: Wind Speed",
 	desc      = "Records Wind statistics",
+    version   = "2026-04",
 	author    = "MasterBel2",
 	date      = "June 2024",
 	license   = "GNU GPL, v2",
