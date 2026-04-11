@@ -12,14 +12,12 @@ function widget:AddConsoleLine(line)
     demoFileName = line:match("[PreGame::GameDataReceived] recording demo to \".+demos/(.+)\"")
     
     if demoFileName then
-        Spring.Echo("Found demoFileName: " .. demoFileName)
         widgetHandler:RemoveCallIn("AddConsoleLine")
         return
     end
 
     demoFileName = line:match("Opening demofile demos%/(.+)")
     if demoFileName then
-         Spring.Echo("Found demoFileName: " .. demoFileName)
         widgetHandler:RemoveCallIn("AddConsoleLine")
         return
     end

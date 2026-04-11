@@ -41,7 +41,7 @@ local builderIDs = {}
 local finishedUnitIDs = {}
 local ignoredUnitIDs = {}
 
-local reportedUnits = {}
+-- local reportedUnits = {}
 
 -----------
 -- Graph --
@@ -207,11 +207,11 @@ function widget:GameFrame(n)
                                     local yVertices = reclaimDamageDealtGraph.lines[builderTeam + 1].vertices.y
                                     yVertices[#yVertices] = yVertices[#yVertices] + healthReclaimed
                                 end
-                            else
-                                if not reportedUnits[reclaimTarget] then
-                                    reportedUnits[reclaimTarget] = true
-                                    Spring.Echo("Failed to find unit def id for unit " .. reclaimTarget .. "(max units: " .. Game.maxUnits .. ", isDead: " .. tostring(Spring.GetUnitIsDead(reclaimTarget) or "nil") .. ")")
-                                end
+                            -- else
+                                -- if not reportedUnits[reclaimTarget] then
+                                --     reportedUnits[reclaimTarget] = true
+                                    -- Spring.Echo("Failed to find unit def id for unit " .. reclaimTarget .. "(max units: " .. Game.maxUnits .. ", isDead: " .. tostring(Spring.GetUnitIsDead(reclaimTarget) or "nil") .. ")")
+                                -- end
                             end
                         end
                     end
@@ -245,7 +245,6 @@ function widget:GameFrame(n)
 end
 
 function widget:UnitCommand(unitID, _, _, cmdID, cmdParams, options, cmdTag)
-    Spring.Echo("UnitCommand", os.clock(), #cmdParams)
     if builderIDs[unitID]
     and cmdID == CMD.RECLAIM
     and ((options.shift == false) or firstCommandIsReclaim(unitID)) -- The more we can reduce the number of cases where we do this engine round-trip, the better
@@ -261,11 +260,9 @@ function widget:UnitCommand(unitID, _, _, cmdID, cmdParams, options, cmdTag)
 end
 function widget:UnitCmdDone(unitID)
     buildersReclaiming[unitID] = nil
-    Spring.Echo("UnitCmdDone", Spring.GetGameFrame())
     if builderIDs[unitID] then
         local commands = Spring.GetUnitCommands(unitID, 1)
         if commands and commands[1] and commands[1].id == CMD.RECLAIM then
-            Spring.Echo("Forwarding UnitCommand")
             self:UnitCommand(unitID, nil, nil, commands[1].id, commands[1].params, commands[1].options)
         end
     end
@@ -350,9 +347,9 @@ function widget:UnitDestroyed(unitID, unitDefID, unitTeam, attackerID, attackerD
     unitHealthDamageChange[unitID] = nil
     unitHealthBuilderChange[unitID] = nil
 
-    if weaponDefID == -12 then
-        Sprin.Echo("reclaimed")
-    end
+    -- if weaponDefID == -12 then
+    --     TODO
+    -- end
 end
 
 function widget:Initialize()
