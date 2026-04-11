@@ -30,15 +30,8 @@ local unitDefs = {
 
 for key, color in pairs(unitDefs) do
     local energyMake = UnitDefNames[key].energyMake - UnitDefNames[key].energyUpkeep
-    -- end
-    -- if key == "armsolar" or key == "corsolar" then
-    --     energyMake = -UnitDefNames[key].energyUpkeep
-    -- else
-    --     energyMake = UnitDefNames[key].energyMake
-    -- end
     local equivalentSpeed = 37 / UnitDefNames[key].metalCost * energyMake
     table.insert(lines, {
-        -- name = UnitDefNames[key].
         title = key,
         color = color,
         vertices = { x = { 0, 1 }, y = { equivalentSpeed, equivalentSpeed } }
@@ -59,8 +52,6 @@ function widget:GameFrame(n)
     local _, _, _, windStrength = Spring.GetWind()
     table.insert(line.vertices.x, n)
     table.insert(line.vertices.y, math.min(25, windStrength))
-    -- line.vertices.x[#line.vertices.x + 1] = n
-    -- line.vertices.y[#line.vertices.y + 1] = windStrength
 
     for i = 2, #lines do
         lines[i].vertices.x[2] = n

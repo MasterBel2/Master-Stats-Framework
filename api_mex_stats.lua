@@ -60,14 +60,8 @@ function widget:GameFrame(n)
             if unitDef.extractsMetal ~= 0 then
                 local _, _, _, energyUse = Spring.GetUnitResources(unitID)
                 local metalExtraction = Spring.GetUnitMetalExtraction(unitID)
-                -- Spring.Echo(energyUse)
-                -- Spring.Echo("upkeep: " .. unitDef.energyUpkeep)
-                -- Spring.Echo("metalExtraction: " .. metalExtraction)
-                -- Spring.Echo(math.min(energyUse, unitDef.energyUpkeep) / unitDef.energyUpkeep * metalExtraction)
-                -- Spring.Echo(((unitDef.energyUpkeep - math.min(energyUse, unitDef.energyUpkeep)) / unitDef.energyUpkeep * metalExtraction))
-                -- error()
+
                 metalExtracted = metalExtracted + math.min(energyUse, unitDef.energyUpkeep) / unitDef.energyUpkeep * metalExtraction
-                -- metalExtracted = metalExtracted + metalExtraction
                 metalLostDuringEStall = metalLostDuringEStall + ((unitDef.energyUpkeep - math.min(energyUse, unitDef.energyUpkeep)) / unitDef.energyUpkeep * metalExtraction)
             end
         end

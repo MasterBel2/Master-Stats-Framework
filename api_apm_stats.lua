@@ -99,7 +99,6 @@ function widget:UnitCommand(_, _, unitTeam, _, _)
         stats.count = stats.count + 1
         stats.lastFrame = gameFrame
 
-        -- Spring.Echo("###", totalCommandsGraphData[unitTeam + 1] == nil)
         local line = totalCommandsGraphData.lines[unitTeam + 1]
         local vertexCount = #line.vertices.x
 
