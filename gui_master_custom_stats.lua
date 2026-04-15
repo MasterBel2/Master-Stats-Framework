@@ -269,7 +269,7 @@ local function DisplayGraphMatchingNames(graphNames)
         local graphName = graphNames[i]
 
         if graphData[graphName] then
-            graphContainer:SetData(graphData[graphName], graphName .. ":")
+            graphContainer:SetData(graphData[graphName], graphName)
         else
             graphContainer:SetData(demoGraph, "Select Graph")
         end
@@ -1323,7 +1323,7 @@ function UI.GraphContainer(graph)
             graph = newGraph
             title = newTitle
             uiGraph:SetData(graph)
-            graphTitle:SetString(newTitle)
+            graphTitle:SetString(newTitle .. ":")
 
             logarithmicCheckBox:SetSelected(graph.showAsLogarithmic)
             deltaCheckBox:SetSelected(graph.showAsDelta)
