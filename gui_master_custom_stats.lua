@@ -1028,7 +1028,8 @@ function UI.GraphContainer(graph)
     end)
     local graphTitle = MasterFramework:Text("Demo Graph: ")
 
-    local compositionLogicField = WG.LuaTextEntry(MasterFramework, "", "Enter Composition Logic Here", function()
+    local compositionLogicField
+    compositionLogicField = WG.LuaTextEntry(MasterFramework, "", "Enter Composition Logic Here", function()
         local data = uiGraph:GetData()
         if data and data._customComposedGraph then
             local func = loadstring("return function(x, dependencyYValues)\nreturn " .. compositionLogicField.text:GetRawString() .. "\nend")
@@ -1050,7 +1051,8 @@ function UI.GraphContainer(graph)
             end
         end
     end)
-    local graphDependenciesField = WG.LuaTextEntry(MasterFramework, "", "Enter Graph Dependencies Here", function()
+    local graphDependenciesField
+    graphDependenciesField = WG.LuaTextEntry(MasterFramework, "", "Enter Graph Dependencies Here", function()
         local data = uiGraph:GetData()
         if data and data._customComposedGraph then
             local func = loadstring("return { " .. graphDependenciesField.text:GetRawString() .. " }")
