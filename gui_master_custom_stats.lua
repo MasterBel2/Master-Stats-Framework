@@ -182,6 +182,13 @@ local function returnFirstDependency(x, dependencyYValues)
     return dependencyYValues[1]
 end
 
+local menu
+local uiCategories = {}
+
+local currentOverlay
+
+local refreshRequested = true
+
 ------------------------------------------------------------------------------------------------------------
 -- Config
 ------------------------------------------------------------------------------------------------------------
@@ -250,10 +257,164 @@ local function format(number, unit)
 end
 
 ------------------------------------------------------------------------------------------------------------
+-- Data
+------------------------------------------------------------------------------------------------------------
+
+local function DisplayGraphMatchingNames(graphNames)
+    config.selectedGraphTitles = graphNames
+
+    local graphContainers = graphGrid:GetMembers()
+    for i = 1, #graphNames do
+        local graphContainer = graphContainers[i] or UI.GraphContainer()
+        local graphName = graphNames[i]
+
+        if graphData[graphName] then
+            graphContainer:SetData(graphData[graphName], graphName .. ":")
+        else
+            graphContainer:SetData(demoGraph, "Select Graph")
+        end
+
+        graphContainers[i] = graphContainer
+    end
+    for i = #graphNames + 1, #graphContainers do
+        graphContainers[i] = nil
+    end
+
+    graphGrid:SetMembers(graphContainers)
+end
+
+
+local function SaveComposedGraph(graphName, graph)
+    Spring.Echo("SavingComposedGraphs")
+    Spring.CreateDir(composedGraphsDir)
+    local file = io.open(composedGraphsDir .. "/" .. graphName .. ".json", "w")
+    file:write(Json.encode({
+        graphName = graphName,
+        generator = graph._rawGenerator,
+        yUnit = graph.yUnit,
+        dependencyNames = graph.dependencyNames
+    }))
+    file:close()
+end
+
+local customComposedGraphs = {}
+
+function widget:MasterStatsCategories()
+    return {
+        ["Custom Composed Graphs"] = customComposedGraphs
+    }
+end
+
+local function Refresh()
+    categories = {}
+    graphData = {}
+
+    for _, widget in pairs(widgetHandler.widgets) do
+        if widget.MasterStatsCategories then
+            -- categories[name] = { graphs = table }
+            local widgetCategories = widget:MasterStatsCategories()
+
+            for categoryName, widgetCategory in pairs(widgetCategories) do
+                local section = {}
+                for graphName, graph in pairs(widgetCategory) do
+                    section[graphName] = graph
+                    graphData[graphName] = graph
+                end
+
+                local existingCategory = categories[categoryName] or { sections = {} }
+                existingCategory.sections[widget.whInfo.name] = section
+
+                categories[categoryName] = existingCategory
+            end
+        end
+    end
+
+    for categoryKey, category in pairs(categories) do
+        for sectionKey, section in pairs(category.sections) do
+            for graphName, graph in pairs(section) do
+                if graph.dependencyNames then
+                    graph.lines = {}
+                    if not pcall(function()
+                        -- Spring.Echo(graphName)
+                        graph.dependencies = table.imap(graph.dependencyNames, function(index, dependencyName)
+                            -- Spring.Echo("Dependency " .. index .. ": " .. dependencyName)
+                            local dependency = graphData[dependencyName]
+                            -- Spring.Echo(dependencyName, dependency)
+                            if not dependency then error() end
+                            return dependency
+                        end)
+                    end) then
+                        graph.dependencies = {}
+                        -- section[graphName] = nil
+                        -- if next(section) == nil then
+                        --     Spring.Echo("Section empty!")
+                        --     category.sections[sectionKey] = nil
+                        --     if next(category.sections) == nil then
+                        --         Spring.Echo("Category empty!")
+                        --         categories[categoryKey] = nil
+                        --     end
+                        -- end
+                    end
+                end
+            end
+        end
+    end
+
+    menu:SetData(categories)
+
+    if config.selectedGraphTitle then
+        -- Migration
+        DisplayGraphMatchingNames({ config.selectedGraphTitle })
+        config.selectedGraphTitle = nil
+    end
+    if config.selectedGraphTitles then
+        DisplayGraphMatchingNames(config.selectedGraphTitles)
+    end
+
+    refreshRequested = nil
+end
+
+------------------------------------------------------------------------------------------------------------
 -- Interface Structure
 ------------------------------------------------------------------------------------------------------------
 
 local UI = {}
+
+function UI.CategoryMenu(categories, action)
+    local categoryMenu = MasterFramework:VerticalStack(
+        {},
+        MasterFramework:AutoScalingDimension(8),
+        0
+    )
+
+    function categoryMenu:SetData(categories)
+        local uiCategories = table.mapToArray(categories, function(key, value)
+            local graphNames = {}
+            for _, section in pairs(value.sections) do
+                for graphName, _ in pairs(section) do
+                    table.insert(graphNames, graphName)
+                end
+            end
+
+            table.sort(graphNames)
+
+            return {
+                name = key,
+                list = UI.SectionedButtonList(key, graphNames, action)
+            }
+        end)
+
+        table.sort(uiCategories, function(a, b) return a.name < b.name end)
+
+        self:SetMembers(table.imap(uiCategories, function(_, value)
+            return value.list
+        end))
+
+    end
+
+    categoryMenu:SetData(categories)
+    return categoryMenu
+end
 
 function UI.MatchWidth(target, body)
     local matchWidth = {}
@@ -1217,13 +1378,6 @@ end
 -- UI Element Var Declarations
 ------------------------------------------------------------------------------------------------------------
 
-local menu
-local uiCategories = {}
-
-local currentOverlay
-
-local refreshRequested = true
-
 function UI.SectionedButtonList(name, options, action)
     local padding = MasterFramework:AutoScalingDimension(8)
 
@@ -1253,158 +1407,6 @@ function UI.SectionedButtonList(name, options, action)
     )
 
     return buttonList
-end
-
-local function DisplayGraphMatchingNames(graphNames)
-    config.selectedGraphTitles = graphNames
-
-    local graphContainers = graphGrid:GetMembers()
-    for i = 1, #graphNames do
-        local graphContainer = graphContainers[i] or UI.GraphContainer()
-        local graphName = graphNames[i]
-
-        if graphData[graphName] then
-            graphContainer:SetData(graphData[graphName], graphName .. ":")
-        else
-            graphContainer:SetData(demoGraph, "Select Graph")
-        end
-
-        graphContainers[i] = graphContainer
-    end
-    for i = #graphNames + 1, #graphContainers do
-        graphContainers[i] = nil
-    end
-
-    graphGrid:SetMembers(graphContainers)
-end
-
-------------------------------------------------------------------------------------------------------------
--- Data
-------------------------------------------------------------------------------------------------------------
-
-local function SaveComposedGraph(graphName, graph)
-    Spring.CreateDir(composedGraphsDir)
-    local file = io.open(composedGraphsDir .. "/" .. graphName .. ".json", "w")
-    file:write(Json.encode({
-        graphName = graphName,
-        generator = graph._rawGenerator,
-        yUnit = graph.yUnit,
-        dependencyNames = graph.dependencyNames
-    }))
-    file:close()
-end
-
-local customComposedGraphs = {}
-
-function widget:MasterStatsCategories()
-    return {
-        ["Custom Composed Graphs"] = customComposedGraphs
-    }
-end
-
-function UI.CategoryMenu(categories, action)
-    local categoryMenu = MasterFramework:VerticalStack(
-        {},
-        MasterFramework:AutoScalingDimension(8),
-        0
-    )
-
-    function categoryMenu:SetData(categories)
-        local uiCategories = table.mapToArray(categories, function(key, value)
-            local graphNames = {}
-            for _, section in pairs(value.sections) do
-                for graphName, _ in pairs(section) do
-                    table.insert(graphNames, graphName)
-                end
-            end
-
-            table.sort(graphNames)
-
-            return {
-                name = key,
-                list = UI.SectionedButtonList(key, graphNames, action)
-            }
-        end)
-
-        table.sort(uiCategories, function(a, b) return a.name < b.name end)
-
-        self:SetMembers(table.imap(uiCategories, function(_, value)
-            return value.list
-        end))
-
-    end
-
-    categoryMenu:SetData(categories)
-    return categoryMenu
-end
-
-local function Refresh()
-    categories = {}
-    graphData = {}
-
-    for _, widget in pairs(widgetHandler.widgets) do
-        if widget.MasterStatsCategories then
-            -- categories[name] = { graphs = table }
-            local widgetCategories = widget:MasterStatsCategories()
-
-            for categoryName, widgetCategory in pairs(widgetCategories) do
-                local section = {}
-                for graphName, graph in pairs(widgetCategory) do
-                    section[graphName] = graph
-                    graphData[graphName] = graph
-                end
-
-                local existingCategory = categories[categoryName] or { sections = {} }
-                existingCategory.sections[widget.whInfo.name] = section
-
-                categories[categoryName] = existingCategory
-            end
-        end
-    end
-
-    for categoryKey, category in pairs(categories) do
-        for sectionKey, section in pairs(category.sections) do
-            for graphName, graph in pairs(section) do
-                if graph.dependencyNames then
-                    graph.lines = {}
-                    if not pcall(function()
-                        -- Spring.Echo(graphName)
-                        graph.dependencies = table.imap(graph.dependencyNames, function(index, dependencyName)
-                            -- Spring.Echo("Dependency " .. index .. ": " .. dependencyName)
-                            local dependency = graphData[dependencyName]
-                            -- Spring.Echo(dependencyName, dependency)
-                            if not dependency then error() end
-                            return dependency
-                        end)
-                    end) then
-                        graph.dependencies = {}
-                        -- section[graphName] = nil
-                        -- if next(section) == nil then
-                        --     Spring.Echo("Section empty!")
-                        --     category.sections[sectionKey] = nil
-                        --     if next(category.sections) == nil then
-                        --         Spring.Echo("Category empty!")
-                        --         categories[categoryKey] = nil
-                        --     end
-                        -- end
-                    end
-                end
-            end
-        end
-    end
-
-    menu:SetData(categories)
-
-    if config.selectedGraphTitle then
-        -- Migration
-        DisplayGraphMatchingNames({ config.selectedGraphTitle })
-        config.selectedGraphTitle = nil
-    end
-    if config.selectedGraphTitles then
-        DisplayGraphMatchingNames(config.selectedGraphTitles)
-    end
-
-    refreshRequested = nil
 end
 
 ------------------------------------------------------------------------------------------------------------
